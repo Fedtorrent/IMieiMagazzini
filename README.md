@@ -22,21 +22,28 @@ L'applicazione segue un approccio **Local-First**, garantendo un'interfaccia rea
 
 ## 📱 Screenshot
 
-| Home Page | Dettaglio Prodotto | Gestione Posizioni |
-|:---:|:---:|:---:|
-| ![Home](public/MAG_1.jpeg) | ![Dettaglio](public/MAG_2.jpeg) | ![Posizioni](public/MAG_3.jpeg) |
+<p align="center">
+  <img src="public/MAG_1.jpeg" width="30%" />
+  <img src="public/MAG_2.jpeg" width="30%" />
+  <img src="public/MAG_3.jpeg" width="30%" />
+</p>
 
-| Ricerca e Filtri | Modalità Compatta | Aggiunta Prodotto |
-|:---:|:---:|:---:|
-| ![Filtri](public/MAG_4.jpeg) | ![Compatta](public/MAG_5.jpeg) | ![Aggiunta](public/MAG_6.jpeg) |
+<p align="center">
+  <img src="public/MAG_4.jpeg" width="30%" />
+  <img src="public/MAG_5.jpeg" width="30%" />
+  <img src="public/MAG_6.jpeg" width="30%" />
+</p>
 
-| Modifica Quantità | Notifiche Scadenze | Statistiche |
-|:---:|:---:|:---:|
-| ![Quantità](public/MAG_7.jpeg) | ![Scadenze](public/MAG_8.jpeg) | ![Statistiche](public/MAG_9_Stat.jpeg) |
+<p align="center">
+  <img src="public/MAG_7.jpeg" width="30%" />
+  <img src="public/MAG_8.jpeg" width="30%" />
+  <img src="public/MAG_9_Stat.jpeg" width="30%" />
+</p>
 
-| Impostazioni | Configurazione Database |
-|:---:|:---:|
-| ![Impostazioni](public/MAG_10_Impo.jpeg) | ![Configurazione](public/MAG_11_Conf.jpeg) |
+<p align="center">
+  <img src="public/MAG_10_Impo.jpeg" width="30%" />
+  <img src="public/MAG_11_Conf.jpeg" width="30%" />
+</p>
 
 ---
 
