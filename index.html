@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="it" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    
+    <title>Magazzino Domestico</title>
+    <meta name="description" content="Gestione Magazzino Domestico">
+    
+    <!-- PWA Settings -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="app-icon.svg">
+    
+    <!-- Barra di Stato Android -->
+    <meta name="theme-color" content="#059669">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              gray: {
+                750: '#2d3748',
+                850: '#1a202c',
+                950: '#0d1117',
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Inter', sans-serif;
+        overscroll-behavior-y: none;
+      }
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 3px;
+      }
+      .dark ::-webkit-scrollbar-thumb {
+        background: #4b5563;
+      }
+
+      /* ── Splash Screen ── */
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+        background: #111827; /* gray-900 */
+        transition: opacity 0.5s ease;
+      }
+      #splash.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #splash img {
+        width: 140px;
+        height: 140px;
+        object-fit: contain;
+        animation: splash-pulse 1.6s ease-in-out infinite;
+      }
+      #splash p {
+        color: #6b7280;
+        font-size: 13px;
+        letter-spacing: 0.05em;
+      }
+      @keyframes splash-pulse {
+        0%, 100% { opacity: 1;   transform: scale(1); }
+        50%       { opacity: 0.7; transform: scale(0.96); }
+      }
+    </style>
+
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+    <!-- Splash screen: sparisce quando React monta il root -->
+    <div id="splash">
+      <img src="/I_Miei_Magazzini.png" alt="I Miei Magazzini" />
+      <p>Caricamento...</p>
+    </div>
+    <div id="root"></div>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('sw.js')
+            .then(reg => {
+              console.log('SW Android Pronto');
+              reg.update();
+            })
+            .catch(err => console.log('SW Error:', err));
+        });
+      }
+
+      // Nasconde lo splash quando React ha montato il DOM
+      window.__hideSplash = function() {
+        const splash = document.getElementById('splash');
+        if (!splash) return;
+        splash.classList.add('hidden');
+        setTimeout(() => splash.remove(), 550);
+      };
+    </script>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>

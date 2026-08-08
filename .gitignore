@@ -1,0 +1,76 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.package-lock.json
+
+# Vite / Build output
+dist/
+.vite/
+.vite-temp/
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+*.swp
+vcs.xml
+markdown.xml
+misc.xml
+modules.xml
+planningMode.xml
+workspace.xml
+
+# OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment / Secrets
+.env
+.env.local
+.env.*.local
+
+# Android - Gradle and Build
+.gradle/
+.gradle_home/
+.android_temp/
+**/build/
+android/.gradle/
+android/.gradle_home/
+android/local.properties
+android/captures/
+android/.externalNativeBuild
+android/.cxx/
+android/lint/
+android/.navigation/
+
+# Android - Device and Log files
+*.apk
+*.aar
+*.ap_
+*.aab
+*.dex
+*.class
+*.hprof
+*.log
+
+# Capacitor - Generated files
+android/app/src/main/assets/public
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+android/app/src/main/res/xml/config.xml
+android/capacitor-cordova-android-plugins
+
+# App Specific Trash
+Build
+build_pwa.bat
+I_Miei_Magazzini.png
+assets/icon.png
+assets/splash.png
+public/IconaPersonale.png
+
+# Proguard
+android/app/proguard/
