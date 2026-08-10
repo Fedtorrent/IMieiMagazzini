@@ -6,11 +6,22 @@ import { EditForm } from './components/EditForm';
 import { SettingsModal } from './components/SettingsModal';
 import { ConfirmationModal } from './components/ConfirmationModal';
 import { FilterBar } from './components/FilterBar';
-import { SetupGuide } from './components/SetupGuide';
 import { AppTutorial } from './components/AppTutorial';
 import { WelcomeScreen } from './components/WelcomeScreen';
+import { UpdateLogModal } from './components/UpdateLogModal';
 import { InventoryItem, AppView, DEFAULT_LOCATIONS, CATEGORIES } from './types';
-import { fetchInventory, addInventoryItem, updateInventoryItem, deleteInventoryItem, isApiConfigured, getExpirationStatus } from './services/api';
+import {
+  fetchInventory,
+  addInventoryItem,
+  updateInventoryItem,
+  deleteInventoryItem,
+  isApiConfigured,
+  getExpirationStatus,
+  clearLocationInventory,
+  truncateInventory,
+  clearFamilyCode,
+  getFamilyCode
+} from './services/api';
 import {
   loadCachedItems,
   saveCachedItems,
@@ -22,20 +33,18 @@ import {
   removeFromPendingQueue,
   getPendingCount,
 } from './services/storageService';
-import { Home, Plus, BarChart2, Filter, Loader2, WifiOff, RefreshCw } from 'lucide-react';
+import { Home, Plus, BarChart2, Filter, Loader2, WifiOff, RefreshCw, RotateCcw } from 'lucide-react';
+import { App as CapApp } from '@capacitor/app';
 
-// Ottimizzazione chunk: Caricamento differito del dashboard statistiche (pesante per via di recharts)
 const StatsDashboard = lazy(() => import('./components/StatsDashboard').then(m => ({ default: m.StatsDashboard })));
 
 export default function App() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(false);
-  // true = caricamento silenzioso in background (dati dalla cache già visibili)
   const [backgroundSync, setBackgroundSync] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(() => getPendingCount());
 
-  // ─── Rimuove lo splash screen al mount di React ───────────────────────────
   useEffect(() => {
     if (typeof (window as any).__hideSplash === 'function') {
       (window as any).__hideSplash();
@@ -44,12 +53,9 @@ export default function App() {
 
   const [view, setView] = useState<AppView>(AppView.LIST);
   const [searchTerm, setSearchTerm] = useState('');
-  
   const [isCompactMode, setIsCompactMode] = useState(() => {
-    const isConfigured = isApiConfigured();
-    if (!isConfigured) return false;
     const saved = localStorage.getItem('isCompactMode');
-    return saved !== null ? JSON.parse(saved) : true;
+    return saved !== null ? JSON.parse(saved) : false; // Default a false per avere le schede
   });
 
   useEffect(() => {
@@ -58,39 +64,66 @@ export default function App() {
   
   const [locationFilter, setLocationFilter] = useState<string>('Tutti');
   const [stockFilter, setStockFilter] = useState<'all' | 'available' | 'out_of_stock' | 'expiring' | 'expired'>('all');
-  
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [itemToDuplicate, setItemToDuplicate] = useState<InventoryItem | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showSetupGuide, setShowSetupGuide] = useState(false);
-  const [needsConfig, setNeedsConfig] = useState(!isApiConfigured());
+  const [needsConfig, setNeedsConfig] = useState(() => !isApiConfigured());
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
-  
+  const [showUpdateLog, setShowUpdateLog] = useState(false);
+
+  // Controllo versione per apertura automatica Log Aggiornamenti
+  useEffect(() => {
+    const checkVersion = async () => {
+      try {
+        const info = await CapApp.getInfo();
+        const currentVersion = info.version; // Prende il versionName dal build.gradle
+        const lastSeenVersion = localStorage.getItem('last_seen_version');
+
+        if (lastSeenVersion !== currentVersion && !needsConfig) {
+          const timer = setTimeout(() => {
+            setShowUpdateLog(true);
+            localStorage.setItem('last_seen_version', currentVersion);
+          }, 2500);
+          return () => clearTimeout(timer);
+        }
+      } catch (e) {
+        console.error("Impossibile recuperare info versione nativa", e);
+      }
+    };
+
+    checkVersion();
+  }, [needsConfig]);
+
+  // Trigger Tutorial Automatico
   useEffect(() => {
     const seen = localStorage.getItem('tutorial_seen');
-    if (!seen && !showSettings && !showSetupGuide && !needsConfig) {
+    if (!seen && !showSettings && !needsConfig) {
         const timer = setTimeout(() => setShowTutorial(true), 1500);
         return () => clearTimeout(timer);
     }
-  }, [showSettings, showSetupGuide, needsConfig]);
-
-  const handleTutorialClose = () => {
-      setShowTutorial(false);
-      localStorage.setItem('tutorial_seen', 'true');
-  };
+  }, [showSettings, needsConfig]);
 
   const restartTutorial = () => {
-      if (view !== AppView.LIST) setView(AppView.LIST);
+      setView(AppView.LIST);
+      setIsSidebarOpen(false);
       setShowTutorial(true);
   };
-  
+
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [locationToHide, setLocationToHide] = useState<string | null>(null);
   const [warningConfig, setWarningConfig] = useState<{title: string, message: string} | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  const [showTotalResetConfirm, setShowTotalResetConfirm] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [showInventoryClearConfirm, setShowInventoryClearConfirm] = useState(false);
+  const [showInventoryClearModal, setShowInventoryClearModal] = useState(false);
+  const [isClearingInventory, setIsClearingInventory] = useState(false);
+  const [inventoryAttempt, setInventoryAttempt] = useState(0);
+
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('theme') as 'light' | 'dark') || 'dark';
   });
@@ -123,12 +156,10 @@ export default function App() {
     items.forEach(item => {
         if (item.Posizione) locationsSet.add(item.Posizione);
     });
-    
     const allLocs = Array.from(locationsSet).sort();
     return allLocs.filter(loc => {
         if (hiddenLocations.includes(loc)) {
-             const hasItems = items.some(i => i.Posizione === loc);
-             return hasItems; 
+             return items.some(i => i.Posizione === loc);
         }
         return true;
     });
@@ -136,217 +167,73 @@ export default function App() {
 
   useEffect(() => {
     const root = window.document.documentElement;
-    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
-    
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-    
-    if (metaThemeColor) metaThemeColor.setAttribute('content', '#059669');
+    if (theme === 'dark') root.classList.add('dark');
+    else root.classList.remove('dark');
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  // ─── Svuota la pending queue sincronizzando con il server ──────────────────
   const flushPendingQueue = useCallback(async (): Promise<boolean> => {
     const queue = getPendingQueue();
     if (queue.length === 0) return true;
-
     let allOk = true;
     for (const op of queue) {
       try {
-        if (op.action === 'create' && op.item) {
-          await addInventoryItem(op.item);
-        } else if (op.action === 'update' && op.item) {
-          await updateInventoryItem(op.item);
-        } else if (op.action === 'delete' && op.itemId) {
-          await deleteInventoryItem(op.itemId);
-        }
+        if (op.action === 'create' && op.item) await addInventoryItem(op.item);
+        else if (op.action === 'update' && op.item) await updateInventoryItem(op.item);
+        else if (op.action === 'delete' && op.itemId) await deleteInventoryItem(op.itemId);
         removeFromPendingQueue(op.id);
       } catch {
         allOk = false;
-        // Lascia le operazioni fallite nella coda per il prossimo tentativo
       }
     }
     setPendingCount(getPendingCount());
     return allOk;
   }, []);
 
-  // ─── Caricamento dati (con supporto Local-First) ───────────────────────────
   const loadData = useCallback(async (silent = false) => {
     if (!isApiConfigured()) return;
-
-    // Prima svuota le operazioni pendenti
     await flushPendingQueue();
 
-    if (silent) {
-      setBackgroundSync(true);
-    } else {
-      setLoading(true);
-    }
+    if (silent) setBackgroundSync(true);
+    else setLoading(true);
+
     setError(null);
 
     try {
       const data = await fetchInventory();
-      setItems(data);
-      saveCachedItems(data);
+      setItems(data || []);
+      saveCachedItems(data || []);
+      setError(null);
     } catch (err: any) {
-      console.warn('loadData: fetch fallito, uso cache locale', err);
-      // In caso di errore di rete, non blocchiamo l'UI se abbiamo già dati in cache
-      if (items.length === 0) {
-        setError(err.message || "Impossibile caricare i dati.");
-      }
+      console.error("Errore caricamento:", err);
+      setError(err.message || "Errore di connessione al database.");
     } finally {
       setLoading(false);
       setBackgroundSync(false);
     }
-  }, [flushPendingQueue, items.length]);
+  }, [flushPendingQueue]);
 
-  // ─── Avvio: carica la cache immediatamente, poi aggiorna dal server ────────
   useEffect(() => {
-    if (!isApiConfigured()) return;
-
-    // 1. Carica subito dalla cache locale (UX istantanea)
+    if (needsConfig) return;
     const cached = loadCachedItems();
-    if (cached.length > 0) {
-      setItems(cached);
-    }
-
-    // 2. Se la cache è stale (o vuota), aggiorna dal server
+    if (cached.length > 0) setItems(cached);
     if (isCacheStale() || cached.length === 0) {
-      // Se abbiamo già dati in cache, il fetch è silenzioso (background)
-      loadData(cached.length > 0);
+        loadData(cached.length > 0);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);  // Solo al mount — loadData è stabile ma lo escludiamo per evitare loop
+  }, [loadData, needsConfig]);
 
-  const filteredItems = useMemo(() => {
-    return items
-      .filter(item => {
-        const matchesSearch = item.Descrizione.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                              item.Note.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesLocation = locationFilter === 'Tutti' || item.Posizione === locationFilter;
-        let matchesStock = true;
-        if (stockFilter === 'available') {
-          matchesStock = item.Qta > 0;
-        } else if (stockFilter === 'out_of_stock') {
-          matchesStock = item.Qta === 0;
-        } else if (stockFilter === 'expiring') {
-          const { isExpiring, isExpired } = getExpirationStatus(item.DataScadenza);
-          matchesStock = isExpiring && !isExpired && item.Qta > 0; 
-        } else if (stockFilter === 'expired') {
-          const { isExpired } = getExpirationStatus(item.DataScadenza);
-          matchesStock = isExpired && item.Qta > 0;
-        }
-        return matchesSearch && matchesLocation && matchesStock;
-      })
-      .sort((a, b) => a.Descrizione.localeCompare(b.Descrizione, undefined, { sensitivity: 'base' }));
-  }, [items, searchTerm, locationFilter, stockFilter]);
-
-  // ─── Modifica quantità con ottimistic update + fallback a queue ───────────
-  const handleQuantityChange = async (id: string, delta: number) => {
-    const targetItem = items.find(i => i.IdLista === id);
-    if (!targetItem) return;
-
-    const newQta = Math.max(0, targetItem.Qta + delta);
-    const updatedItem = { ...targetItem, Qta: newQta };
-
-    // Ottimistic update immediato
-    const newItems = items.map(item => item.IdLista === id ? updatedItem : item);
-    setItems(newItems);
-    saveCachedItems(newItems);
-
-    try {
-      await updateInventoryItem(updatedItem);
-    } catch {
-      // Se offline → aggiungi alla coda (mantieni l'ottimistic update)
-      addToPendingQueue('update', updatedItem);
-      setPendingCount(getPendingCount());
-    }
-  };
-
-  const handleDeleteRequest = (id: string) => {
-    setItemToDelete(id);
-  };
-
-  // ─── Eliminazione con ottimistic update + fallback a queue ────────────────
-  const confirmDelete = async () => {
-    if (!itemToDelete) return;
-    setIsDeleting(true);
-    const id = itemToDelete;
-
-    // Ottimistic delete immediato
-    const newItems = items.filter(item => item.IdLista !== id);
-    setItems(newItems);
-    saveCachedItems(newItems);
-    setItemToDelete(null);
-
-    try {
-      await deleteInventoryItem(id);
-    } catch {
-      // Se offline → aggiungi alla coda
-      addToPendingQueue('delete', undefined, id);
-      setPendingCount(getPendingCount());
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  const handleCopy = (item: InventoryItem) => {
-    const newItem: InventoryItem = {
-      ...item,
-      IdLista: Math.random().toString(36).substr(2, 9),
-      Descrizione: `${item.Descrizione} (Copia)`,
-    };
-    setItemToDuplicate(newItem);
-    setIsAdding(true);
-  };
-
-  // ─── Salvataggio (create/update) con ottimistic update + queue ────────────
-  const handleSaveItem = async (item: InventoryItem) => {
-    if (editingItem) {
-      // UPDATE: ottimistic
-      const newItems = items.map(i => i.IdLista === item.IdLista ? item : i);
-      setItems(newItems);
-      saveCachedItems(newItems);
-      setEditingItem(null);
-
-      try {
-        await updateInventoryItem(item);
-      } catch {
-        addToPendingQueue('update', item);
-        setPendingCount(getPendingCount());
-      }
-    } else {
-      // CREATE: ottimistic
-      const newItems = [item, ...items];
-      setItems(newItems);
-      saveCachedItems(newItems);
-      setSearchTerm('');
-      setLocationFilter('Tutti');
-      setStockFilter('all');
-      setIsAdding(false);
-      setItemToDuplicate(null);
-
-      try {
-        await addInventoryItem(item);
-      } catch {
-        addToPendingQueue('create', item);
-        setPendingCount(getPendingCount());
-      }
-    }
-  };
+  const handleManualSync = useCallback(async () => {
+    await flushPendingQueue();
+    await loadData(false);
+  }, [flushPendingQueue, loadData]);
 
   const handleConfigSave = () => {
     setNeedsConfig(false);
     setShowSettings(false);
-    loadData(false);
   };
 
-  // ─── Disconnect: pulisce tutto ─────────────────────────────────────────────
   const handleDisconnect = () => {
-    localStorage.removeItem('GSHEET_API_URL');
+    clearFamilyCode();
     clearCache();
     clearPendingQueue();
     setItems([]);
@@ -356,66 +243,92 @@ export default function App() {
     setIsSidebarOpen(false);
   };
 
-  const handleHomeClick = () => {
-    setView(AppView.LIST);
-    setSearchTerm('');
-    setLocationFilter('Tutti');
-    setStockFilter('all');
-  };
+  const handleInventoryClear = async (location: string) => {
+    setIsClearingInventory(true);
+    let attempts = 0;
+    const maxAttempts = 3;
+    let success = false;
+    let lastError = "";
 
-  const handleAddClick = () => {
-     if (needsConfig) {
-         setShowSettings(true);
-     } else {
-         setIsAdding(true);
-     }
-  };
-
-  const handleHideLocation = (loc: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const count = items.filter(i => i.Posizione === loc).length;
-    if (count > 0) {
-        setWarningConfig({
-            title: "Impossibile eliminare",
-            message: `Impossibile eliminare "${loc}".\nCi sono ${count} prodotti associati.`
-        });
-        return;
-    }
-    setLocationToHide(loc);
-  };
-
-  const confirmHideLocation = () => {
-    if (locationToHide) {
-        setHiddenLocations(prev => [...prev, locationToHide]);
-        if (locationFilter === locationToHide) {
-            setLocationFilter('Tutti');
+    while (attempts < maxAttempts && !success) {
+      attempts++;
+      setInventoryAttempt(attempts);
+      try {
+        await clearLocationInventory(location);
+        await loadData(true);
+        const cached = loadCachedItems();
+        const stillGreater = cached.filter(i => i.Posizione === location && i.Qta > 0);
+        if (stillGreater.length === 0) success = true;
+        else {
+            lastError = "Sincronizzazione incompleta.";
+            if (attempts < maxAttempts) await new Promise(r => setTimeout(r, 1500));
         }
-        setLocationToHide(null);
+      } catch (err: any) {
+          lastError = err.message || "Errore di connessione.";
+          if (attempts < maxAttempts) await new Promise(r => setTimeout(r, 1500));
+      }
+    }
+
+    if (success) {
+      setShowInventoryClearModal(false);
+      setIsSidebarOpen(false);
+      setView(AppView.LIST);
+      setWarningConfig({ title: "Completato", message: `Magazzino "${location}" azzerato.` });
+    } else {
+      await loadData(false);
+      setWarningConfig({ title: "Errore", message: lastError });
+    }
+    setIsClearingInventory(false);
+  };
+
+  const handleTotalReset = async () => {
+    setIsResetting(true);
+    try {
+      await truncateInventory();
+      handleDisconnect();
+      setShowTotalResetConfirm(false);
+    } catch (err: any) {
+      setWarningConfig({ title: "Errore Reset", message: "Impossibile svuotare il database remoto." });
+    } finally {
+      setIsResetting(false);
     }
   };
 
-  const handleRestoreLocation = (loc: string) => {
-      setHiddenLocations(prev => prev.filter(l => l !== loc));
-  };
+  const filteredItems = useMemo(() => {
+    return items
+      .filter(item => {
+        const matchesSearch = item.Descrizione.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                              item.Note.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesLocation = locationFilter === 'Tutti' || item.Posizione === locationFilter;
+        let matchesStock = true;
+        if (stockFilter === 'available') matchesStock = item.Qta > 0;
+        else if (stockFilter === 'out_of_stock') matchesStock = item.Qta === 0;
+        else if (stockFilter === 'expiring') {
+          const { isExpiring, isExpired } = getExpirationStatus(item.DataScadenza);
+          matchesStock = isExpiring && !isExpired && item.Qta > 0;
+        } else if (stockFilter === 'expired') {
+          const { isExpired } = getExpirationStatus(item.DataScadenza);
+          matchesStock = isExpired && item.Qta > 0;
+        }
+        return matchesSearch && matchesLocation && matchesStock;
+      })
+      .sort((a, b) => a.Descrizione.localeCompare(b.Descrizione));
+  }, [items, searchTerm, locationFilter, stockFilter]);
 
-  const toggleStockFilter = (type: 'available' | 'out_of_stock' | 'expiring' | 'expired') => {
-      if (stockFilter === type) {
-          setStockFilter('all');
-      } else {
-          setStockFilter(type);
-      }
-  };
-
-  const resetFilters = () => {
-      setLocationFilter('Tutti');
-      setStockFilter('all');
-  };
-
-  // Forza sync manuale (dal SettingsModal)
-  const handleForceSync = useCallback(async () => {
-    await flushPendingQueue();
-    await loadData(false);
-  }, [flushPendingQueue, loadData]);
+  if (needsConfig) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+        <WelcomeScreen onOpenSettings={() => setShowSettings(true)} />
+        {showSettings && (
+          <SettingsModal
+            onSave={handleConfigSave}
+            onCancel={() => setShowSettings(false)}
+            onForceSync={handleManualSync}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white pb-24 font-sans transition-colors duration-200">
@@ -434,107 +347,91 @@ export default function App() {
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
         onOpenCloudSettings={() => setShowSettings(true)}
-        onOpenSetupGuide={() => setShowSetupGuide(true)}
         onDisconnectRequest={() => setShowDisconnectConfirm(true)}
-        isConfigured={!needsConfig}
+        isConfigured={true}
         currentTheme={theme}
         onToggleTheme={setTheme}
         hiddenLocations={hiddenLocations}
-        onRestoreLocation={handleRestoreLocation}
+        onRestoreLocation={(loc) => setHiddenLocations(prev => prev.filter(l => l !== loc))}
         onRestartTutorial={restartTutorial}
+        onTotalResetRequest={() => setShowTotalResetConfirm(true)}
+        onInventoryClearRequest={() => {
+          setIsSidebarOpen(false);
+          setShowInventoryClearConfirm(true);
+        }}
+        onOpenUpdateLog={() => setShowUpdateLog(true)}
       />
 
       <main className="max-w-3xl mx-auto px-4 py-6">
-        {needsConfig ? (
-          <WelcomeScreen 
-            onOpenSettings={() => setShowSettings(true)}
-            onOpenGuide={() => setShowSetupGuide(true)}
-          />
-        ) : (
           <>
-            {/* Banner errore di rete (non bloccante se abbiamo dati in cache) */}
             {error && (
-              <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 p-4 rounded-xl flex items-start gap-3 animate-fade-in-up">
+              <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 p-4 rounded-xl flex items-start gap-3">
                  <WifiOff size={24} className="mt-1 shrink-0" />
                  <div className="flex-1">
-                   <p className="font-bold">Errore di Comunicazione</p>
-                   <p className="text-sm mt-1 opacity-80">{error}</p>
-                   {items.length > 0 && (
-                     <p className="text-xs mt-2 opacity-60">Stai visualizzando i dati salvati in locale.</p>
-                   )}
+                   <p className="font-bold text-sm uppercase tracking-wider">Errore Database</p>
+                   <p className="text-xs mt-1 opacity-80">{error}</p>
                  </div>
-                 <button onClick={() => loadData(false)} className="bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 px-3 py-1 rounded-lg text-sm font-semibold hover:bg-red-50 dark:hover:bg-red-900/40 transition-colors">
+                 <button onClick={() => loadData(false)} className="bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 px-3 py-1 rounded-lg text-xs font-black uppercase hover:bg-red-50 transition-colors">
                    Riprova
                  </button>
               </div>
             )}
 
-            {/* Banner sync in background */}
             {backgroundSync && (
-              <div className="mb-4 flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 animate-pulse px-1">
+              <div className="mb-4 flex items-center gap-2 text-[10px] text-emerald-600 dark:text-emerald-400 animate-pulse px-1 font-black uppercase tracking-widest">
                 <RefreshCw size={12} className="animate-spin" />
-                <span>Sincronizzazione in corso...</span>
+                <span>Sincronizzazione Cloud...</span>
               </div>
             )}
 
             {view === AppView.LIST && (
-              <>
-                <div className="mb-2 px-1 text-sm font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-                  {stockFilter === 'all' && "Tutti i Prodotti"}
-                  {stockFilter === 'available' && "Prodotti Esistenti"}
-                  {stockFilter === 'out_of_stock' && "Prodotti Esauriti"}
-                  {stockFilter === 'expiring' && "Prodotti in Scadenza"}
-                  {stockFilter === 'expired' && "Prodotti Scaduti"}
-                </div>
                 <FilterBar
                     locationFilter={locationFilter}
                     stockFilter={stockFilter}
                     availableLocations={availableLocations}
                     onLocationSelect={setLocationFilter}
-                    onStockFilterToggle={toggleStockFilter}
-                    onResetFilters={resetFilters}
-                    onHideLocation={handleHideLocation}
+                    onStockFilterToggle={(type) => setStockFilter(stockFilter === type ? 'all' : type)}
+                    onResetFilters={() => { setLocationFilter('Tutti'); setStockFilter('all'); }}
+                    onHideLocation={(loc) => setLocationToHide(loc)}
                 />
-              </>
             )}
 
-            {/* Caricamento iniziale (solo se cache vuota) */}
             {loading && items.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-emerald-600 dark:text-emerald-400">
+              <div className="flex flex-col items-center justify-center py-20 text-emerald-600">
                 <Loader2 size={48} className="animate-spin mb-4" />
-                <p className="font-medium">Sincronizzazione dati...</p>
+                <p className="font-black uppercase tracking-[0.2em] text-[10px]">Accesso al Magazzino...</p>
               </div>
             ) : view === AppView.LIST ? (
               <div className="space-y-4">
                 {filteredItems.length === 0 ? (
                   <div className="text-center py-10">
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 inline-block max-w-md w-full">
-                        <Filter size={48} className="mx-auto mb-4 text-gray-300 dark:text-gray-600" />
-                        <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2">Nessun prodotto trovato</h3>
-                        {searchTerm || locationFilter !== 'Tutti' || stockFilter !== 'all' ? (
-                             <>
-                                <p className="text-gray-500 dark:text-gray-400 mb-4">
-                                    Nessun risultato per i filtri attuali.
-                                </p>
-                                <button onClick={resetFilters} className="mt-2 text-emerald-600 dark:text-emerald-400 font-medium hover:underline">
-                                    Resetta Filtri
-                                </button>
-                             </>
-                        ) : (
-                            <p className="text-gray-500 dark:text-gray-400">La lista è vuota. Aggiungi il primo prodotto!</p>
-                        )}
+                    <div className="bg-white dark:bg-gray-800 p-8 rounded-[32px] shadow-sm border border-gray-100 dark:border-gray-700 inline-block max-w-md w-full">
+                        <Filter size={48} className="mx-auto mb-4 text-gray-200 dark:text-gray-700" />
+                        <h3 className="text-lg font-black text-gray-800 dark:text-white mb-2 uppercase tracking-tight">Nessun prodotto</h3>
+                        <p className="text-gray-500 dark:text-gray-400 text-sm mb-6 font-bold">La lista è vuota.</p>
+                        <button onClick={() => { setLocationFilter('Tutti'); setStockFilter('all'); }} className="text-emerald-600 font-black text-[10px] uppercase tracking-[0.2em] hover:underline">Resetta Filtri</button>
                     </div>
                   </div>
                 ) : (
-                  <div className={`grid gap-4 ${isCompactMode ? 'grid-cols-1' : 'sm:grid-cols-2 lg:grid-cols-2'}`}>
+                  <div className={`grid gap-4 ${isCompactMode ? 'grid-cols-1' : 'sm:grid-cols-2'}`}>
                     {filteredItems.map(item => (
                       <InventoryCard
                         key={item.IdLista}
                         item={item}
-                        onDelete={handleDeleteRequest}
+                        onDelete={setItemToDelete}
                         onEdit={setEditingItem}
-                        onCopy={handleCopy}
-                        onQuantityChange={handleQuantityChange}
+                        onCopy={(item) => {
+                          const newItem = { ...item, IdLista: Math.random().toString(36).substr(2, 9), Descrizione: `${item.Descrizione} (Copia)` };
+                          setItemToDuplicate(newItem);
+                          setIsAdding(true);
+                        }}
+                        onQuantityChange={async (id, delta) => {
+                          const target = items.find(i => i.IdLista === id);
+                          if (!target) return;
+                          const updated = { ...target, Qta: Math.max(0, target.Qta + delta) };
+                          setItems(items.map(i => i.IdLista === id ? updated : i));
+                          try { await updateInventoryItem(updated); } catch { addToPendingQueue('update', updated); setPendingCount(getPendingCount()); }
+                        }}
                         isCompact={isCompactMode}
                       />
                     ))}
@@ -547,63 +444,48 @@ export default function App() {
               </Suspense>
             )}
           </>
-        )}
       </main>
 
-      {!needsConfig && (
-        <nav className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md border-t border-gray-200 dark:border-gray-700 py-3 px-6 z-40 pb-[calc(env(safe-area-inset-bottom)+12px)] shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] transition-colors duration-200">
-          <div className="max-w-3xl mx-auto flex justify-around items-center">
-            <button 
-              id="tour-home-btn"
-              onClick={handleHomeClick}
-              className={`flex flex-col items-center gap-1 transition-colors ${view === AppView.LIST ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'}`}
-            >
-              <Home size={24} />
-              <span className="text-[10px] font-medium uppercase tracking-wide">Home</span>
-            </button>
-            
-            <button 
-              id="tour-add-btn"
-              onClick={handleAddClick}
-              disabled={isCompactMode}
-              className={`flex flex-col items-center gap-1 -mt-8 group ${isCompactMode ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              <div className={`w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-white border-4 border-gray-50 dark:border-gray-900 group-active:scale-95 transition-transform ${isCompactMode ? 'bg-gray-400 dark:bg-gray-600' : 'bg-emerald-500 dark:bg-emerald-600'}`}>
-                <Plus size={28} />
-              </div>
-            </button>
-
-            <button 
-              id="tour-stats-btn"
-              onClick={() => setView(AppView.STATS)}
-              className={`flex flex-col items-center gap-1 transition-colors ${view === AppView.STATS ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'}`}
-            >
-              <BarChart2 size={24} />
-              <span className="text-[10px] font-medium uppercase tracking-wide">Stats</span>
-            </button>
-          </div>
-        </nav>
-      )}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-t border-gray-100 dark:border-gray-800 py-4 px-8 z-40 pb-[calc(env(safe-area-inset-bottom)+16px)] shadow-2xl">
+        <div className="max-w-3xl mx-auto flex justify-around items-center">
+          <button id="tour-home-btn" onClick={() => { setView(AppView.LIST); setSearchTerm(''); }} className={`flex flex-col items-center gap-1 ${view === AppView.LIST ? 'text-emerald-600' : 'text-gray-400'}`}>
+            <Home size={24} />
+            <span className="text-[9px] font-black uppercase tracking-widest">Home</span>
+          </button>
+          <button id="tour-add-btn" onClick={() => setIsAdding(true)} className={`-mt-12 w-16 h-16 rounded-full shadow-2xl shadow-emerald-500/20 flex items-center justify-center text-white border-8 border-gray-50 dark:border-gray-900 transition-all active:scale-90 bg-emerald-500 hover:bg-emerald-600`}>
+            <Plus size={32} strokeWidth={3} />
+          </button>
+          <button id="tour-stats-btn" onClick={() => setView(AppView.STATS)} className={`flex flex-col items-center gap-1 ${view === AppView.STATS ? 'text-emerald-600' : 'text-gray-400'}`}>
+            <BarChart2 size={24} />
+            <span className="text-[9px] font-black uppercase tracking-widest">Stats</span>
+          </button>
+        </div>
+      </nav>
 
       {showSettings && (
         <SettingsModal 
-          currentUrl={localStorage.getItem('GSHEET_API_URL')}
           onSave={handleConfigSave}
           onCancel={() => setShowSettings(false)}
-          onOpenSetupGuide={() => setShowSetupGuide(true)}
-          onForceSync={handleForceSync}
+          onForceSync={handleManualSync}
         />
       )}
       
-      {(isAdding || editingItem) && !needsConfig && (
+      {(isAdding || editingItem) && (
         <EditForm 
           initialItem={editingItem || itemToDuplicate || undefined}
-          onCancel={() => { 
-            setIsAdding(false); 
-            setEditingItem(null); 
-            setItemToDuplicate(null);
+          onCancel={() => { setIsAdding(false); setEditingItem(null); setItemToDuplicate(null); }}
+          onSave={async (item) => {
+             if (editingItem) {
+                setItems(items.map(i => i.IdLista === item.IdLista ? item : i));
+                setEditingItem(null);
+                try { await updateInventoryItem(item); } catch { addToPendingQueue('update', item); setPendingCount(getPendingCount()); }
+             } else {
+                const itemWithFamily = { ...item, IdFamiglia: getFamilyCode() || '' };
+                setItems([itemWithFamily, ...items]);
+                setIsAdding(false);
+                try { await addInventoryItem(itemWithFamily); } catch { addToPendingQueue('create', itemWithFamily); setPendingCount(getPendingCount()); }
+             }
           }}
-          onSave={handleSaveItem}
           isSaving={false}
           availableCategories={availableCategories}
           availableLocations={availableLocations}
@@ -613,9 +495,14 @@ export default function App() {
       {!!itemToDelete && (
         <ConfirmationModal 
           isOpen={true}
-          title="Elimina Prodotto"
-          message="Sei sicuro di voler eliminare definitivamente questo prodotto? L'azione non può essere annullata."
-          onConfirm={confirmDelete}
+          title="Elimina"
+          message="Sei sicuro?"
+          onConfirm={async () => {
+             const id = itemToDelete;
+             setItems(items.filter(i => i.IdLista !== id));
+             setItemToDelete(null);
+             try { await deleteInventoryItem(id); } catch { addToPendingQueue('delete', undefined, id); setPendingCount(getPendingCount()); }
+          }}
           onCancel={() => setItemToDelete(null)}
           isProcessing={isDeleting}
         />
@@ -624,48 +511,114 @@ export default function App() {
       {showDisconnectConfirm && (
         <ConfirmationModal 
           isOpen={true}
-          title="Scollega Database"
-          message="Vuoi scollegare il database attuale? Dovrai inserire nuovamente l'URL per accedere ai tuoi dati."
+          title="Esci"
+          message="Scollegare il codice?"
           onConfirm={handleDisconnect}
           onCancel={() => setShowDisconnectConfirm(false)}
-          confirmText="Scollega"
+          confirmText="Esci"
         />
       )}
 
       {!!locationToHide && (
         <ConfirmationModal 
           isOpen={true}
-          title="Nascondi Posizione"
-          message={`Vuoi nascondere la posizione "${locationToHide}"? Potrai ripristinarla dalle impostazioni.`}
-          onConfirm={confirmHideLocation}
+          title="Nascondi"
+          message={`Nascondere "${locationToHide}"?`}
+          onConfirm={() => { setHiddenLocations(prev => [...prev, locationToHide!]); setLocationToHide(null); }}
           onCancel={() => setLocationToHide(null)}
-          confirmText="Nascondi"
         />
       )}
 
       {!!warningConfig && (
         <ConfirmationModal 
           isOpen={true}
-          title={warningConfig.title || ''}
-          message={warningConfig.message || ''}
+          title={warningConfig.title}
+          message={warningConfig.message}
           onConfirm={() => setWarningConfig(null)}
-          confirmText="Ho capito"
-        />
-      )}
-
-      {showSetupGuide && (
-        <SetupGuide 
-          isOpen={true} 
-          onClose={() => setShowSetupGuide(false)}
-          onOpenSettings={() => setShowSettings(true)}
+          confirmText="OK"
         />
       )}
 
       {showTutorial && (
         <AppTutorial 
           isOpen={true}
-          onClose={handleTutorialClose}
+          onClose={() => { setShowTutorial(false); localStorage.setItem('tutorial_seen', 'true'); }}
         />
+      )}
+
+      {showUpdateLog && (
+        <UpdateLogModal
+          isOpen={true}
+          onClose={() => setShowUpdateLog(false)}
+        />
+      )}
+
+      {showTotalResetConfirm && (
+        <ConfirmationModal
+          isOpen={true}
+          title="RESET TOTALE"
+          message="ATTENZIONE: Questa azione eliminerà TUTTI i prodotti della tua famiglia dal database. Non potrai tornare indietro. Procediamo?"
+          onConfirm={handleTotalReset}
+          onCancel={() => setShowTotalResetConfirm(false)}
+          isProcessing={isResetting}
+          confirmText="Sì, Reset Totale"
+        />
+      )}
+
+      {showInventoryClearConfirm && (
+        <ConfirmationModal
+          isOpen={true}
+          title="Azzera Quantità"
+          message="Questo comando azzera tutte le quantità dei prodotti nel magazzino scelto per facilitare l'inventario dei prodotti esistenti. Procediamo?"
+          onConfirm={() => {
+            setShowInventoryClearConfirm(false);
+            setShowInventoryClearModal(true);
+          }}
+          onCancel={() => setShowInventoryClearConfirm(false)}
+          confirmText="Procedi"
+          cancelText="Annulla"
+        />
+      )}
+
+      {showInventoryClearModal && !isClearingInventory && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-gray-100 dark:border-gray-700">
+              <h3 className="text-xl font-bold text-gray-800 dark:text-white">Seleziona Magazzino</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quale magazzino vuoi azzerare?</p>
+            </div>
+            <div className="p-2 max-h-[60vh] overflow-y-auto">
+               {availableLocations.map(loc => (
+                 <button
+                    key={loc}
+                    onClick={() => handleInventoryClear(loc)}
+                    className="w-full text-left p-4 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-2xl flex items-center justify-between group transition-colors"
+                 >
+                    <span className="font-semibold text-gray-700 dark:text-gray-300">{loc}</span>
+                    <RotateCcw size={18} className="text-gray-400 group-hover:text-emerald-500" />
+                 </button>
+               ))}
+            </div>
+            <div className="p-4 bg-gray-50 dark:bg-gray-700/30 flex gap-3">
+              <button
+                onClick={() => setShowInventoryClearModal(false)}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                Chiudi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {(isClearingInventory || isResetting) && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-300">
+            <div className="bg-white dark:bg-gray-800 p-10 rounded-[40px] shadow-2xl flex flex-col items-center max-w-xs w-full animate-in zoom-in-95 duration-300">
+                <Loader2 size={64} className="animate-spin text-emerald-500 mb-8" />
+                <h3 className="text-xl font-black text-gray-800 dark:text-white mb-2 uppercase tracking-tighter">Sincronizzazione</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 font-bold leading-relaxed">Aggiornamento in corso...</p>
+            </div>
+        </div>
       )}
     </div>
   );

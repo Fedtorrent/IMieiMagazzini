@@ -1,10 +1,9 @@
-// Service Worker per Magazzino Domestico - v7
-const CACHE_NAME = 'magazzino-v7';
+// Service Worker per Magazzino Domestico - v8
+const CACHE_NAME = 'magazzino-v8';
 const urlsToCache = [
   '/',
   '/index.html',
-  '/manifest.json',
-  '/app-icon.svg'
+  '/manifest.json'
 ];
 
 self.addEventListener('install', (event) => {
@@ -33,11 +32,6 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.url.includes('script.google.com')) {
-      event.respondWith(fetch(event.request));
-      return;
-  }
-
   event.respondWith(
     caches.match(event.request)
       .then((response) => {

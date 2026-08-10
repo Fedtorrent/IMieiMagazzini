@@ -1,34 +1,47 @@
 
-import { InventoryItem, GoogleSheetResponse, CATEGORIES } from '../types';
+import { createClient } from '@supabase/supabase-js';
+import { InventoryItem } from '../types';
 
-// Helper per ottenere l'URL salvato
-const getApiUrl = () => localStorage.getItem('GSHEET_API_URL');
+// CREDENZIALI SUPABASE
+const SUPABASE_URL = 'https://tueuodqqkmplntykovze.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR1ZXVvZHFxa21wbG50eWtvdnplIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzNTg5NDUsImV4cCI6MjEwMTkzNDk0NX0.-umkINKCi-24qi6Yf7i3vdfXkoWI0ycQlQenf5T-aok';
 
-export const isApiConfigured = () => !!getApiUrl();
+// Inizializzazione del client Supabase
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-export const setApiUrl = (url: string) => localStorage.setItem('GSHEET_API_URL', url);
+// Helper per gestire il Codice Familiare nel localStorage
+export const getFamilyCode = () => localStorage.getItem('FAMILY_CODE');
+export const setFamilyCode = (code: string) => localStorage.setItem('FAMILY_CODE', code.trim().toUpperCase());
+export const clearFamilyCode = () => localStorage.removeItem('FAMILY_CODE');
 
-// Helper per formattare la data in DD/MM/YYYY
-const formatDate = (raw: any): string => {
-  if (!raw) return '';
-  
-  const str = String(raw);
-  
-  // Se è già nel formato corretto DD/MM/YYYY o DD-MM-YYYY
-  if (str.match(/^\d{1,2}[\/-]\d{1,2}[\/-]\d{4}$/)) {
-    return str.replace(/-/g, '/');
-  }
+// L'app è configurata se esiste un codice familiare salvato
+export const isApiConfigured = () => !!getFamilyCode();
 
-  // Gestione formato ISO (es. 2026-11-11T23:00:00.000Z) o YYYY-MM-DD
-  const dateObj = new Date(str);
-  if (!isNaN(dateObj.getTime())) {
-    const day = String(dateObj.getDate()).padStart(2, '0');
-    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-    const year = dateObj.getFullYear();
-    return `${day}/${month}/${year}`;
-  }
+// Nomi Tabelle e Colonne (Allineati alla tua struttura)
+const TBL = {
+    PRODOTTI: 'Prodotti',
+    FAMIGLIE: 'Famiglie'
+};
 
-  return str;
+const COL = {
+    FAMIGLIA_IN_PRODOTTI: 'IdFamiglia',
+    FAMIGLIA_IN_FAMIGLIE: 'IdFamiglie' // Con la E finale come da tua indicazione
+};
+
+// Conversione data da GG/MM/AAAA (App) a AAAA-MM-GG (Supabase)
+const toDbDate = (dateStr: string) => {
+    if (!dateStr || !dateStr.includes('/')) return null;
+    const [d, m, y] = dateStr.split('/');
+    return `${y}-${m}-${d}`;
+};
+
+// Conversione data da AAAA-MM-GG (Supabase) a GG/MM/AAAA (App)
+const fromDbDate = (dateStr: any) => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    const [y, m, d] = parts;
+    return `${d}/${m}/${y}`;
 };
 
 // Helper centralizzato per calcolare lo stato della scadenza
@@ -52,149 +65,152 @@ export const getExpirationStatus = (dateString: string) => {
           diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
           
           if (diffDays < 0) isExpired = true;
-          // Consideriamo in scadenza se mancano 30 giorni o meno (e non è già scaduto)
           else if (diffDays <= 30) isExpiring = true;
         }
       }
-    } catch (e) {
-      // Fail silently
-    }
+    } catch (e) {}
   }
 
   return { isExpired, isExpiring, diffDays };
 };
 
 export const fetchInventory = async (): Promise<InventoryItem[]> => {
-  const url = getApiUrl();
-  
-  // MODIFICA: Se non c'è URL, non lanciare errore ma ritorna lista vuota
-  // Questo permette all'app di avviarsi per la prima configurazione
-  if (!url) {
-      console.log("App non configurata, avvio in modalità vuota.");
-      return []; 
+  const familyCode = getFamilyCode();
+  if (!familyCode) return [];
+
+  const { data, error } = await supabase
+    .from(TBL.PRODOTTI)
+    .select('*')
+    .eq(COL.FAMIGLIA_IN_PRODOTTI, familyCode)
+    .order('Descrizione', { ascending: true });
+
+  if (error) {
+    console.error("Supabase Fetch Error:", error);
+    throw new Error(error.message);
   }
 
-  // Aggiungiamo un timestamp per evitare che il browser mostri dati vecchi (caching)
-  const fetchUrl = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+  return (data || []).map((item: any) => ({
+      ...item,
+      DataScadenza: fromDbDate(item.DataScadenza)
+  })) as InventoryItem[];
+};
 
-  try {
-    const response = await fetch(fetchUrl, {
-        method: 'GET'
-    });
+export const addInventoryItem = async (item: InventoryItem): Promise<any> => {
+  const familyCode = getFamilyCode();
+  if (!familyCode) throw new Error("Codice familiare non impostato");
 
-    if (!response.ok) {
-        throw new Error(`Errore HTTP: ${response.status}`);
-    }
+  const dbItem = {
+      ...item,
+      [COL.FAMIGLIA_IN_PRODOTTI]: familyCode,
+      DataScadenza: toDbDate(item.DataScadenza)
+  };
 
-    const text = await response.text();
-    let data;
+  const { data, error } = await supabase
+    .from(TBL.PRODOTTI)
+    .insert([dbItem]);
+
+  if (error) throw new Error(error.message);
+  return { status: 'success', data };
+};
+
+export const updateInventoryItem = async (item: InventoryItem): Promise<any> => {
+  const familyCode = getFamilyCode();
+  if (!familyCode) throw new Error("Codice familiare non impostato");
+
+  const dbItem = {
+      ...item,
+      DataScadenza: toDbDate(item.DataScadenza)
+  };
+
+  const { error } = await supabase
+    .from(TBL.PRODOTTI)
+    .update(dbItem)
+    .eq('IdLista', item.IdLista)
+    .eq(COL.FAMIGLIA_IN_PRODOTTI, familyCode);
+
+  if (error) throw new Error(error.message);
+  return { status: 'success' };
+};
+
+export const deleteInventoryItem = async (id: string): Promise<any> => {
+  const familyCode = getFamilyCode();
+  if (!familyCode) throw new Error("Codice familiare non impostato");
+
+  const { error } = await supabase
+    .from(TBL.PRODOTTI)
+    .delete()
+    .eq('IdLista', id)
+    .eq(COL.FAMIGLIA_IN_PRODOTTI, familyCode);
+
+  if (error) throw new Error(error.message);
+  return { status: 'success' };
+};
+
+export const clearLocationInventory = async (location: string): Promise<any> => {
+    const familyCode = getFamilyCode();
+    if (!familyCode) throw new Error("Codice familiare non impostato");
+
+    const { error } = await supabase
+        .from(TBL.PRODOTTI)
+        .update({ Qta: 0 })
+        .eq('Posizione', location)
+        .eq(COL.FAMIGLIA_IN_PRODOTTI, familyCode);
+
+    if (error) throw new Error(error.message);
+    return { status: 'success' };
+};
+
+export const truncateInventory = async (): Promise<any> => {
+    const familyCode = getFamilyCode();
+    if (!familyCode) throw new Error("Codice familiare non impostato");
+
+    const { error } = await supabase
+        .from(TBL.PRODOTTI)
+        .delete()
+        .eq(COL.FAMIGLIA_IN_PRODOTTI, familyCode);
+
+    if (error) throw new Error(error.message);
+    return { status: 'success' };
+};
+
+export const getFamilyData = async (familyCode: string): Promise<{ exists: boolean; pin?: string }> => {
     try {
-        data = JSON.parse(text);
-    } catch (e) {
-        console.error("Non è stato possibile leggere il JSON:", text);
-        throw new Error("Risposta non valida dallo script. Controlla che l'URL termini con '/exec'.");
-    }
-    
-    if (data.status === 'error') throw new Error(data.error || data.message);
-    
-    // Se ritorna un array, sono i dati.
-    if (Array.isArray(data)) {
-      // CONTROLLO DI SICUREZZA:
-      if (data.length > 0) {
-         const firstItem = data[0];
-         if (firstItem.IdLista === undefined && firstItem.Descrizione === undefined) {
-             console.warn("Dati ricevuti ma le chiavi sembrano errate. Probabilmente mancano le intestazioni nel Foglio Google.");
-         }
-      }
+        const { data, error } = await supabase
+            .from(TBL.FAMIGLIE)
+            .select('Pin')
+            .eq(COL.FAMIGLIA_IN_FAMIGLIE, familyCode.trim().toUpperCase())
+            .maybeSingle();
 
-      const cleanData = data
-        // Filtra righe vuote o spurie
-        .filter((item: any) => item && (item.Descrizione || item.IdLista))
-        .map((item: any) => ({
-          IdLista: String(item.IdLista || Math.random().toString(36).substr(2, 9)),
-          Categoria: item.Categoria || CATEGORIES[0],
-          Descrizione: item.Descrizione || 'Senza Nome',
-          Qta: Number(item['Qta'] !== undefined ? item['Qta'] : (item['Q.tà'] !== undefined ? item['Q.tà'] : 0)),
-          // Applica la formattazione data
-          DataScadenza: formatDate(item['DataScadenza'] || item['Data Scadenza'] || item['DataScadenza'] || ''),
-          Posizione: item.Posizione || 'Cantina',
-          Note: item.Note || '-'
-        }));
-      
-      return cleanData;
+        if (error) throw error;
+        return { exists: !!data, pin: data?.Pin };
+    } catch (err) {
+        console.error("Errore verifica famiglia:", err);
+        return { exists: false };
     }
-    
-    return [];
-  } catch (error: any) {
-    console.error("Fetch Error:", error);
-    if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
-        throw new Error("Impossibile connettersi. Verifica: 1. Nome foglio 'Prodotti' 2. Permessi 'Chiunque' 3. Intestazioni presenti.");
-    }
-    throw error;
-  }
 };
 
-const handlePost = async (action: string, payload: any): Promise<GoogleSheetResponse> => {
-  const url = getApiUrl();
-  if (!url) throw new Error("URL API non configurato");
+export const createFamily = async (familyCode: string, pin: string): Promise<void> => {
+    const payload = {
+        [COL.FAMIGLIA_IN_FAMIGLIE]: familyCode.trim().toUpperCase(),
+        Pin: pin
+    };
+    const { error } = await supabase
+        .from(TBL.FAMIGLIE)
+        .insert([payload]);
 
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-          'Content-Type': 'text/plain;charset=utf-8', 
-      },
-      body: JSON.stringify({ action, ...payload })
-    });
-    
-    const text = await response.text();
-    
-    if (text.trim().startsWith('<!DOCTYPE html') || text.includes('Google Drive - Error')) {
-        throw new Error("Errore Script Google. Assicurati che il foglio abbia le intestazioni nella riga 1 (IdLista, Descrizione, ecc).");
+    if (error) {
+        console.error("Errore creazione famiglia:", error);
+        throw new Error(`Errore DB: ${error.message} (${error.code})`);
     }
-
-    try {
-        const json = JSON.parse(text);
-        if (json.status === 'error') throw new Error(json.message || json.error);
-        return json;
-    } catch (e) {
-        throw new Error("Errore nel salvataggio. Assicurati di aver pubblicato lo script come 'Nuova Versione'.");
-    }
-  } catch (error: any) {
-    console.error("API POST Error:", error);
-    throw error;
-  }
 };
 
-export const addInventoryItem = async (item: InventoryItem): Promise<GoogleSheetResponse> => {
-  return handlePost('create', { item });
-};
-
-export const updateInventoryItem = async (item: InventoryItem): Promise<GoogleSheetResponse> => {
-  return handlePost('update', { item });
-};
-
-export const deleteInventoryItem = async (id: string): Promise<GoogleSheetResponse> => {
-  return handlePost('delete', { id });
-};
-
-/**
- * Verifica la connettività con il GSheet senza scaricare tutti i dati.
- * Lo script GAS deve supportare l'azione 'ping' (vedi SetupGuide).
- */
 export const pingApi = async (): Promise<boolean> => {
-  const url = getApiUrl();
-  if (!url) return false;
-  try {
-    const res = await fetch(`${url}${url.includes('?') ? '&' : '?'}action=ping&t=${Date.now()}`, {
-      method: 'GET',
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) return false;
-    const text = await res.text();
-    // Il GAS risponde con qualcosa di valido (array JSON o oggetto)
-    return text.trim().startsWith('[') || text.includes('"status"');
-  } catch {
-    return false;
-  }
+    try {
+      const { error } = await supabase.from(TBL.PRODOTTI).select('IdLista').limit(1);
+      return !error;
+    } catch {
+      return false;
+    }
 };
+
+export const resetSupabaseClient = () => {};

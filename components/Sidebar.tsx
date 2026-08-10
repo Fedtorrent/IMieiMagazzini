@@ -1,12 +1,12 @@
 
-import React from 'react';
-import { X, Moon, Sun, CloudCog, Info, RefreshCcw, BookOpen, GraduationCap, Unlink } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Moon, Sun, Users, Info, RefreshCcw, GraduationCap, Unlink, ChevronDown, ChevronUp, Trash2, RotateCcw, History, ChevronRight } from 'lucide-react';
+import { getFamilyCode } from '../services/api';
 
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenCloudSettings: () => void;
-  onOpenSetupGuide: () => void;
   onDisconnectRequest: () => void;
   isConfigured: boolean;
   currentTheme: 'light' | 'dark';
@@ -14,211 +14,165 @@ interface SidebarProps {
   hiddenLocations: string[];
   onRestoreLocation: (loc: string) => void;
   onRestartTutorial: () => void;
+  onTotalResetRequest: () => void;
+  onInventoryClearRequest: () => void;
+  onOpenUpdateLog: () => void;
 }
+
+const CollapsibleSection: React.FC<{
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}> = ({ title, children, defaultOpen = false }) => {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  return (
+    <section className="border-b border-gray-100 dark:border-gray-700 last:border-0 pb-2">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between py-4 text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+      >
+        <span>{title}</span>
+        {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+      </button>
+      {isOpen && <div className="pb-4 space-y-3">{children}</div>}
+    </section>
+  );
+};
 
 export const Sidebar: React.FC<SidebarProps> = ({ 
   isOpen, 
   onClose, 
   onOpenCloudSettings, 
-  onOpenSetupGuide,
   onDisconnectRequest,
   isConfigured,
   currentTheme, 
   onToggleTheme,
   hiddenLocations,
   onRestoreLocation,
-  onRestartTutorial
+  onRestartTutorial,
+  onTotalResetRequest,
+  onInventoryClearRequest,
+  onOpenUpdateLog
 }) => {
+  const familyCode = getFamilyCode();
+
   return (
     <>
-      {/* Backdrop */}
-      <div 
+      <div
         className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-50 transition-opacity duration-300 ${
           isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
         onClick={onClose}
       />
 
-      {/* Sidebar Panel */}
-      <div className={`fixed inset-y-0 right-0 w-72 bg-white dark:bg-gray-800 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out overflow-x-hidden ${
+      <div className={`fixed inset-y-0 right-0 w-80 bg-white dark:bg-gray-800 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${
         isOpen ? 'translate-x-0' : 'translate-x-full'
       }`}>
         <div className="flex flex-col h-full">
-          
-          {/* Header */}
-          <div className="p-5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
-            <h2 className="text-xl font-bold text-gray-800 dark:text-white">Impostazioni</h2>
-            <button 
-              onClick={onClose}
-              className="p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-            >
+          <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+            <div>
+              <h2 className="text-xl font-black text-gray-800 dark:text-white tracking-tight">Menu</h2>
+              {familyCode && (
+                <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mt-1">
+                  ID: {familyCode}
+                </div>
+              )}
+            </div>
+            <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-800 dark:hover:text-white transition-all">
               <X size={20} />
             </button>
           </div>
 
-          {/* Content */}
-          <div className="flex-1 p-5 space-y-8 overflow-y-auto">
-            
-            {/* Theme Section */}
-            <section>
-              <h3 className="text-sm font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">
-                Aspetto
-              </h3>
+          <div className="flex-1 p-6 overflow-y-auto space-y-1">
+            <CollapsibleSection title="Personalizzazione" defaultOpen>
               <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => onToggleTheme('light')}
-                  className={`flex flex-col items-center justify-center p-2 rounded-xl border transition-all ${
-                    currentTheme === 'light'
-                      ? 'bg-emerald-50 border-emerald-500 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-500 dark:text-emerald-400'
-                      : 'bg-white border-gray-200 text-gray-600 hover:border-emerald-200 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300'
-                  }`}
-                >
-                  <Sun size={20} className="mb-1" />
-                  <span className="text-xs font-medium">Chiaro</span>
-                </button>
-                <button
-                  onClick={() => onToggleTheme('dark')}
-                  className={`flex flex-col items-center justify-center p-2 rounded-xl border transition-all ${
-                    currentTheme === 'dark'
-                      ? 'bg-emerald-50 border-emerald-500 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-500 dark:text-emerald-400'
-                      : 'bg-white border-gray-200 text-gray-600 hover:border-emerald-200 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300'
-                  }`}
-                >
-                  <Moon size={20} className="mb-1" />
-                  <span className="text-xs font-medium">Scuro</span>
-                </button>
+                <button onClick={() => onToggleTheme('light')} className={`flex items-center gap-2 justify-center p-3 rounded-2xl border transition-all ${currentTheme === 'light' ? 'bg-emerald-50 border-emerald-500 text-emerald-700' : 'bg-gray-50 border-transparent text-gray-500'}`}><Sun size={18} /><span className="text-xs font-bold uppercase">Light</span></button>
+                <button onClick={() => onToggleTheme('dark')} className={`flex items-center gap-2 justify-center p-3 rounded-2xl border transition-all ${currentTheme === 'dark' ? 'bg-emerald-900/20 border-emerald-500 text-emerald-400' : 'bg-gray-50 border-transparent text-gray-500'}`}><Moon size={18} /><span className="text-xs font-bold uppercase">Dark</span></button>
               </div>
-            </section>
+            </CollapsibleSection>
 
-             {/* Hidden Locations Section */}
-             {hiddenLocations.length > 0 && (
-                <section>
-                    <h3 className="text-sm font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">
-                        Posizioni Nascoste
-                    </h3>
-                    <div className="space-y-2">
-                        {hiddenLocations.map(loc => (
-                            <div key={loc} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/30 rounded-xl border border-gray-100 dark:border-gray-700">
-                                <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">{loc}</span>
-                                <button
-                                    onClick={() => onRestoreLocation(loc)}
-                                    className="p-1.5 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
-                                    title="Ripristina"
-                                >
-                                    <RefreshCcw size={16} />
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                </section>
-            )}
-
-            {/* Cloud Section */}
-            <section>
-              <h3 className="text-sm font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">
-                Dati e Sincronizzazione
-              </h3>
-              <div className="space-y-3">
-                <button
-                    onClick={() => {
-                      onClose();
-                      onOpenCloudSettings();
-                    }}
-                    className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/20 group transition-colors"
-                >
-                    <div className="flex items-center gap-3">
-                    <div className="p-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm text-emerald-600 dark:text-emerald-400">
-                        <CloudCog size={20} />
-                    </div>
+            <CollapsibleSection title="Sincronizzazione">
+              <div className="space-y-2">
+                <button onClick={() => { onClose(); onOpenCloudSettings(); }} className="w-full flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-2xl hover:bg-emerald-50 transition-all">
+                    <Users size={20} className="text-emerald-600" />
                     <div className="text-left">
-                        <div className="font-semibold text-gray-800 dark:text-white group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">Configura Cloud</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Modifica URL Sheet</div>
-                    </div>
+                        <div className="text-xs font-black text-gray-800 dark:text-white uppercase">Codice Familiare</div>
+                        <div className="text-[10px] text-gray-500 font-bold">Cambia ID</div>
                     </div>
                 </button>
-
                 {isConfigured && (
-                  <button
-                      onClick={onDisconnectRequest}
-                      className="w-full flex items-center justify-between p-4 bg-red-50/30 dark:bg-red-900/10 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 group transition-colors border border-red-100/50 dark:border-red-900/30"
-                  >
-                      <div className="flex items-center gap-3">
-                      <div className="p-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm text-red-600 dark:text-red-400">
-                          <Unlink size={20} />
-                      </div>
+                  <button onClick={onDisconnectRequest} className="w-full flex items-center gap-4 p-4 bg-red-50/30 dark:bg-red-900/10 rounded-2xl border border-red-100/50">
+                      <Unlink size={20} className="text-red-600" />
                       <div className="text-left">
-                          <div className="font-semibold text-red-800 dark:text-red-300 group-hover:text-red-900 transition-colors">Scollega Database</div>
-                          <div className="text-xs text-red-500/70">Reset connessione cloud</div>
-                      </div>
+                          <div className="text-xs font-black text-red-800 dark:text-red-300 uppercase">Esci dalla Famiglia</div>
+                          <div className="text-[10px] text-red-500/70 font-bold">Scollega dispositivo</div>
                       </div>
                   </button>
                 )}
-
-                <button
-                    onClick={() => {
-                        onClose();
-                        onOpenSetupGuide();
-                    }}
-                    className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/20 group transition-colors"
-                >
-                    <div className="flex items-center gap-3">
-                    <div className="p-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm text-emerald-600 dark:text-emerald-400">
-                        <BookOpen size={20} />
-                    </div>
-                    <div className="text-left">
-                        <div className="font-semibold text-gray-800 dark:text-white group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">Guida Configurazione</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Crea il tuo foglio</div>
-                    </div>
-                    </div>
-                </button>
               </div>
-            </section>
+            </CollapsibleSection>
 
-             {/* Info Section */}
-             <section>
-              <h3 className="text-sm font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">
-                Info
-              </h3>
-              <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-4 text-sm text-gray-600 dark:text-gray-400 space-y-3">
-                 <p className="flex items-center gap-2 font-medium">
-                    <Info size={16} /> Versione 1.0.0
-                 </p>
-                 <button 
+            {isConfigured && (
+              <CollapsibleSection title="Utilità">
+                <div className="space-y-2">
+                  <button onClick={onInventoryClearRequest} className="w-full flex items-center gap-4 p-4 bg-amber-50/30 dark:bg-amber-900/10 rounded-2xl border border-amber-100/50 text-left">
+                      <RotateCcw size={20} className="text-amber-600" />
+                      <div>
+                          <div className="text-xs font-black text-amber-800 dark:text-amber-300 uppercase">Azzera Quantità</div>
+                          <div className="text-[10px] text-amber-500/70 font-bold">Facilita l'inventario prodotti</div>
+                      </div>
+                  </button>
+                  <button onClick={() => { onClose(); onRestartTutorial(); }} className="w-full flex items-center gap-4 p-4 bg-emerald-50/30 dark:bg-emerald-900/10 rounded-2xl border border-emerald-100/50 text-left">
+                      <GraduationCap size={20} className="text-emerald-600" />
+                      <div>
+                          <div className="text-xs font-black text-emerald-800 dark:text-emerald-300 uppercase">Riavvia Tutorial</div>
+                          <div className="text-[10px] text-emerald-500/70 font-bold">Guida rapida</div>
+                      </div>
+                  </button>
+                  <button onClick={onTotalResetRequest} className="w-full flex items-center gap-4 p-4 bg-red-50/30 dark:bg-red-900/10 rounded-2xl border border-red-100/50 text-left">
+                      <Trash2 size={20} className="text-red-600" />
+                      <div>
+                          <div className="text-xs font-black text-red-800 dark:text-red-300 uppercase">Reset Totale</div>
+                          <div className="text-[10px] text-red-500/70 font-bold">Svuota DB e disconnetti</div>
+                      </div>
+                  </button>
+                </div>
+              </CollapsibleSection>
+            )}
+
+             <CollapsibleSection title="Informazioni">
+              <div className="bg-gray-50 dark:bg-gray-900/50 rounded-2xl p-5 space-y-5 border border-gray-100 dark:border-gray-800">
+                 <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-500 uppercase">Versione</span>
+                    <span className="text-xs font-black text-emerald-600">1.1.0</span>
+                 </div>
+
+                 <button
                     onClick={() => {
                         onClose();
-                        onRestartTutorial();
+                        onOpenUpdateLog();
                     }}
-                    className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 hover:underline text-xs"
+                    className="w-full flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-emerald-200 transition-all group"
                  >
-                    <GraduationCap size={14} />
-                    Riavvia Tutorial App
+                    <div className="flex items-center gap-2">
+                        <History size={16} className="text-emerald-500" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-gray-600 dark:text-gray-300">Log Aggiornamenti</span>
+                    </div>
+                    <ChevronRight size={14} className="text-gray-300 group-hover:translate-x-1 transition-transform" />
                  </button>
-                 <p className="text-xs opacity-70">
-                    App per la gestione del magazzino domestico. I dati rimangono privati sul tuo Google Sheet.
-                 </p>
+
+                 <p className="text-[11px] text-gray-500 font-bold leading-relaxed">App professionale per la gestione del magazzino domestico.</p>
               </div>
-            </section>
+            </CollapsibleSection>
           </div>
 
-          {/* Footer */}
-          <div className="p-6 border-t border-gray-100 dark:border-gray-700 flex flex-col items-center justify-center gap-4">
+          <div className="p-8 border-t border-gray-100 dark:border-gray-700 flex flex-col items-center justify-center gap-6">
             <div className="flex flex-col items-center gap-2">
-              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em]">Sviluppato da</span>
-              <img
-                src="/IconaPersonale.png"
-                alt="FP Logo"
-                className="w-12 h-12 object-contain"
-              />
+              <span className="text-[9px] font-black text-gray-400 uppercase tracking-[0.3em]">Sviluppato da</span>
+              <img src="/IconaPersonale.png" alt="FP Logo" className="w-10 h-10 object-contain" />
             </div>
-
-            <a
-              href="https://fedtorrent.github.io/LeMieApp.github.io/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full py-2 px-4 bg-gray-100 dark:bg-gray-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-gray-600 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 border border-transparent hover:border-emerald-200 dark:hover:border-emerald-800"
-            >
-              Visita il Sito
-            </a>
+            <a href="https://fedtorrent.github.io/LeMieApp.github.io/" target="_blank" rel="noopener noreferrer" className="w-full py-3 bg-gray-50 dark:bg-gray-900 text-gray-500 rounded-2xl text-[9px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 border border-gray-100 hover:text-emerald-600">Visita il Sito</a>
           </div>
         </div>
       </div>

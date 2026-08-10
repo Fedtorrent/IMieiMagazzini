@@ -2,6 +2,7 @@
 // Mappatura esatta delle colonne del Google Sheet
 export interface InventoryItem {
   IdLista: string;
+  IdFamiglia: string; // Nuovo campo per isolamento utenti
   Categoria: string;
   Descrizione: string;
   Qta: number;
@@ -27,10 +28,3 @@ export const DEFAULT_LOCATIONS = [
   'Ripostiglio',
   'Garage'
 ];
-
-export interface GoogleSheetResponse {
-  status?: 'success' | 'error';
-  message?: string;
-  error?: string;
-  [key: string]: any;
-}
