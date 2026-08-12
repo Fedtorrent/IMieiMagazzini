@@ -297,8 +297,14 @@ export default function App() {
   const filteredItems = useMemo(() => {
     return items
       .filter(item => {
-        const matchesSearch = item.Descrizione.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                              item.Note.toLowerCase().includes(searchTerm.toLowerCase());
+        // Protezione contro valori null o undefined che causano crash
+        const descrizione = item.Descrizione || '';
+        const note = item.Note || '';
+        const search = searchTerm.toLowerCase();
+
+        const matchesSearch = descrizione.toLowerCase().includes(search) ||
+                              note.toLowerCase().includes(search);
+
         const matchesLocation = locationFilter === 'Tutti' || item.Posizione === locationFilter;
         let matchesStock = true;
         if (stockFilter === 'available') matchesStock = item.Qta > 0;
@@ -312,7 +318,7 @@ export default function App() {
         }
         return matchesSearch && matchesLocation && matchesStock;
       })
-      .sort((a, b) => a.Descrizione.localeCompare(b.Descrizione));
+      .sort((a, b) => (a.Descrizione || '').localeCompare(b.Descrizione || ''));
   }, [items, searchTerm, locationFilter, stockFilter]);
 
   if (needsConfig) {
@@ -409,7 +415,7 @@ export default function App() {
                         <Filter size={48} className="mx-auto mb-4 text-gray-200 dark:text-gray-700" />
                         <h3 className="text-lg font-black text-gray-800 dark:text-white mb-2 uppercase tracking-tight">Nessun prodotto</h3>
                         <p className="text-gray-500 dark:text-gray-400 text-sm mb-6 font-bold">La lista è vuota.</p>
-                        <button onClick={() => { setLocationFilter('Tutti'); setStockFilter('all'); }} className="text-emerald-600 font-black text-[10px] uppercase tracking-[0.2em] hover:underline">Resetta Filtri</button>
+                        <button onClick={() => { setLocationFilter('Tutti'); setStockFilter('all'); setSearchTerm(''); }} className="text-emerald-600 font-black text-[10px] uppercase tracking-[0.2em] hover:underline">Resetta Filtri</button>
                     </div>
                   </div>
                 ) : (
