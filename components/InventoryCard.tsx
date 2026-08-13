@@ -27,7 +27,9 @@ export const InventoryCard: React.FC<InventoryCardProps> = ({
   // --- COMPACT MODE RENDER ---
   if (isCompact) {
       return (
-        <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-sm border-2 px-4 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${
+        <div
+          onClick={() => onEdit(item)}
+          className={`bg-white dark:bg-gray-800 rounded-lg shadow-sm border-2 px-4 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer active:scale-[0.98] ${
           item.Qta > 0
             ? 'border-emerald-500 dark:border-emerald-600'
             : 'border-red-500 dark:border-red-600 bg-red-50/30 dark:bg-red-900/10'

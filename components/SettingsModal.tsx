@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { Save, Database, CheckCircle2, AlertCircle, Loader2, RefreshCw, Users, ShieldCheck, Lock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Save, Database, CheckCircle2, AlertCircle, Loader2, RefreshCw, Users, ShieldCheck, Lock, UserPlus } from 'lucide-react';
 import { fetchInventory, setFamilyCode, getFamilyCode, getFamilyData, createFamily } from '../services/api';
 import { clearCache, getPendingCount, getLastSyncLabel } from '../services/storageService';
 
@@ -9,6 +9,7 @@ interface SettingsModalProps {
   onCancel: () => void;
   forceOpen?: boolean;
   onForceSync?: () => void;
+  initialMode?: 'create' | 'join';
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ 
@@ -16,6 +17,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onCancel, 
   forceOpen = false,
   onForceSync,
+  initialMode
 }) => {
   const [code, setCode] = useState(() => getFamilyCode() || '');
   const [pin, setPin] = useState('');
@@ -31,6 +33,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [pendingCount] = useState(() => getPendingCount());
   const [lastSync] = useState(() => getLastSyncLabel());
 
+  // Se viene passato un modo iniziale (dal WelcomeScreen), resettiamo gli stati interni
+  useEffect(() => {
+    if (initialMode) {
+        setStep('ID');
+        setError(null);
+    }
+  }, [initialMode]);
+
   const handleIdentifyFamily = async () => {
     if (!code.trim()) return;
 
@@ -39,6 +49,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
     try {
         const data = await getFamilyData(code);
+
+        // Logica Differenziata per Modo
+        if (initialMode === 'create' && data.exists) {
+            setError('Questo Codice Familiare è già occupato. Scegline un altro.');
+            setLoading(false);
+            return;
+        }
+
+        if (initialMode === 'join' && !data.exists) {
+            setError('Codice Familiare non trovato. Controlla che sia corretto.');
+            setLoading(false);
+            return;
+        }
+
         setIsExistingFamily(data.exists);
         setServerPin(data.pin || null);
         setStep('PIN');
@@ -63,7 +87,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         if (isExistingFamily) {
             // Verifica PIN per famiglia esistente
             if (pin !== serverPin) {
-                setError('PIN errato. Inserisci il PIN corretto per questa famiglia.');
+                setError('PIN errato. Inserisci il PIN corretto.');
                 setLoading(false);
                 return;
             }
@@ -105,19 +129,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     );
   }
 
+  // --- UI DYNAMICS ---
+  const isCreate = initialMode === 'create';
+  const Icon = step === 'PIN' ? Lock : (isCreate ? UserPlus : Users);
+  const title = step === 'ID'
+    ? (isCreate ? 'Nuova Famiglia' : 'Accedi')
+    : (isExistingFamily ? 'Verifica PIN' : 'Scegli PIN');
+
+  const subtitle = step === 'ID'
+    ? (isCreate ? 'Crea il tuo spazio privato' : 'Inserisci il codice esistente')
+    : (isExistingFamily ? `Entra in ${code}` : 'Proteggi i tuoi dati');
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white dark:bg-gray-800 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-fade-in-up border border-gray-100 dark:border-gray-700">
 
         <div className="bg-emerald-600 p-8 text-white text-center">
           <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
-            {step === 'ID' ? <Users size={32} /> : <Lock size={32} />}
+            <Icon size={32} />
           </div>
-          <h2 className="text-2xl font-black tracking-tight">
-            {step === 'ID' ? 'Area Famiglia' : (isExistingFamily ? 'Verifica PIN' : 'Crea PIN')}
-          </h2>
+          <h2 className="text-2xl font-black tracking-tight uppercase italic">{title}</h2>
           <p className="text-emerald-100 text-xs font-bold uppercase tracking-widest mt-2 opacity-80">
-            {step === 'ID' ? 'Identifica il tuo magazzino' : (isExistingFamily ? `Accesso a ${code}` : 'Proteggi i tuoi dati')}
+            {subtitle}
           </p>
         </div>
 
@@ -126,7 +159,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="space-y-6">
               <div>
                 <label className="block text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] mb-3">
-                  Codice Familiare
+                  {isCreate ? 'Scegli un Codice' : 'Inserisci Codice'}
                 </label>
                 <input
                   autoFocus
@@ -139,8 +172,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               {error && (
-                <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-2xl text-xs font-bold flex items-center gap-2">
-                    <AlertCircle size={16} /> {error}
+                <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-2xl text-xs font-bold flex items-center gap-2 animate-shake">
+                    <AlertCircle size={16} className="shrink-0" /> {error}
                 </div>
               )}
 
@@ -167,7 +200,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <form onSubmit={handleFinalize} className="space-y-6">
                <div>
                 <label className="block text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] mb-3">
-                  {isExistingFamily ? 'Inserisci PIN di Accesso' : 'Imposta un nuovo PIN'}
+                  {isExistingFamily ? 'PIN di Accesso' : 'Crea un PIN (min 4 cifre)'}
                 </label>
                 <input
                   autoFocus
@@ -181,16 +214,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   placeholder="••••"
                   className="w-full p-5 border-2 border-gray-50 dark:border-gray-900 rounded-2xl focus:border-emerald-500 outline-none text-center font-black tracking-[1em] text-2xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"
                 />
-                {!isExistingFamily && (
-                    <p className="text-[10px] text-gray-400 font-bold text-center mt-3 uppercase tracking-wide">
-                        Il PIN servirà agli altri familiari per accedere.
-                    </p>
-                )}
               </div>
 
               {error && (
-                <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-2xl text-xs font-bold flex items-center gap-2">
-                    <AlertCircle size={16} /> {error}
+                <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-2xl text-xs font-bold flex items-center gap-2 animate-shake">
+                    <AlertCircle size={16} className="shrink-0" /> {error}
                 </div>
               )}
 
@@ -213,7 +241,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </form>
           )}
 
-          {step === 'ID' && (
+          {step === 'ID' && !isCreate && (
             <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
                  <button
                     type="button"

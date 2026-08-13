@@ -1,10 +1,10 @@
 
 import React from 'react';
-import { Users, ArrowRight } from 'lucide-react';
+import { Users, ArrowRight, UserPlus } from 'lucide-react';
 import appImage from '../I_Miei_Magazzini.png';
 
 interface WelcomeScreenProps {
-  onOpenSettings: () => void;
+  onOpenSettings: (mode?: 'create' | 'join') => void;
 }
 
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenSettings }) => {
@@ -28,21 +28,39 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenSettings }) 
         Gestisci le tue scorte domestiche in modo semplice, veloce e condiviso con la tua famiglia.
       </p>
 
-      <div className="w-full max-w-xs mx-auto">
+      <div className="w-full max-w-xs mx-auto space-y-4">
+        {/* Pulsante CREA */}
         <button
-          onClick={onOpenSettings}
+          onClick={() => onOpenSettings('create')}
           className="group w-full flex items-center justify-between p-5 bg-emerald-500 text-white rounded-[24px] shadow-xl shadow-emerald-500/20 hover:bg-emerald-600 active:scale-95 transition-all"
         >
           <div className="flex items-center gap-4">
             <div className="p-2.5 bg-white/20 rounded-xl">
-              <Users size={24} />
+              <UserPlus size={24} />
             </div>
             <div className="text-left">
-              <div className="font-black uppercase tracking-wider text-sm">Entra in Famiglia</div>
-              <div className="text-[10px] text-emerald-100 font-bold uppercase tracking-widest">Codice & PIN</div>
+              <div className="font-black uppercase tracking-wider text-sm">Crea Nuova Famiglia</div>
+              <div className="text-[10px] text-emerald-100 font-bold uppercase tracking-widest">Inizia da zero</div>
             </div>
           </div>
           <ArrowRight size={20} className="group-hover:translate-x-2 transition-transform" />
+        </button>
+
+        {/* Pulsante ACCEDI */}
+        <button
+          onClick={() => onOpenSettings('join')}
+          className="group w-full flex items-center justify-between p-5 bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 rounded-[24px] border-2 border-emerald-100 dark:border-emerald-900/50 shadow-lg shadow-emerald-100/20 dark:shadow-none hover:bg-emerald-50 dark:hover:bg-emerald-900/10 active:scale-95 transition-all"
+        >
+          <div className="flex items-center gap-4">
+            <div className="p-2.5 bg-emerald-50 dark:bg-emerald-900/30 rounded-xl">
+              <Users size={24} />
+            </div>
+            <div className="text-left">
+              <div className="font-black uppercase tracking-wider text-sm">Accedi a Famiglia</div>
+              <div className="text-[10px] text-emerald-600/60 dark:text-emerald-400/60 font-bold uppercase tracking-widest">Ho già un codice</div>
+            </div>
+          </div>
+          <ArrowRight size={20} className="group-hover:translate-x-2 transition-transform opacity-40" />
         </button>
       </div>
 

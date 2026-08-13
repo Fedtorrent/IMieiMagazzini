@@ -68,6 +68,7 @@ export default function App() {
   const [itemToDuplicate, setItemToDuplicate] = useState<InventoryItem | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsMode, setSettingsMode] = useState<'create' | 'join'>('join');
   const [needsConfig, setNeedsConfig] = useState(() => !isApiConfigured());
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
@@ -324,12 +325,18 @@ export default function App() {
   if (needsConfig) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
-        <WelcomeScreen onOpenSettings={() => setShowSettings(true)} />
+        <WelcomeScreen
+          onOpenSettings={(mode) => {
+            setSettingsMode(mode || 'join');
+            setShowSettings(true);
+          }}
+        />
         {showSettings && (
           <SettingsModal
             onSave={handleConfigSave}
             onCancel={() => setShowSettings(false)}
             onForceSync={handleManualSync}
+            initialMode={settingsMode}
           />
         )}
       </div>

@@ -10,17 +10,17 @@ interface UpdateLogModalProps {
 const UPDATE_LOG = [
   {
     version: '1.1.0',
-    date: '10/08/2026',
-    title: 'Migrazione Supabase & Sicurezza',
+    date: '13/08/2026',
+    title: 'Migrazione Supabase & Ottimizzazioni',
     changes: [
       'Migrazione backend da Google Sheets a Supabase (PostgreSQL)',
-      'Introduzione Sistema di Sicurezza con Codice Familiare e PIN',
-      'Isolamento dei dati per famiglia per una privacy completa',
-      'Operazioni massive (Azzera Quantità e Reset) rese istantanee e atomiche',
-      'Nuovo Welcome Screen semplificato per un accesso immediato',
-      'Ottimizzazione performance caricamento e sincronizzazione cloud',
-      'Ripristino e correzione del Tutorial interattivo dell\'app',
-      'Miglioramenti grafici alla Sidebar e alle sezioni Utilità'
+      'Sistema di Sicurezza con Codice Familiare e PIN d\'accesso',
+      'Nuovo Welcome Screen con flussi separati per Creazione e Accesso',
+      'Vista Compatta: ora cliccabile per modificare i prodotti rapidamente',
+      'Dashboard Statistiche migliorata con legende testuali e nuove KPI (Scadenze)',
+      'Operazioni massive (Azzera Quantità e Reset) istantanee e atomiche',
+      'Ottimizzazione UI: caratteri più grandi e leggibili nelle statistiche',
+      'Correzione Tutorial interattivo e pulizia file obsoleti'
     ]
   },
   {
