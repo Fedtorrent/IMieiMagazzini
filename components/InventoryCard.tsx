@@ -126,7 +126,7 @@ export const InventoryCard: React.FC<InventoryCardProps> = ({
 
       {item.Note && item.Note !== '-' && (
         <p className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/50 p-2 rounded-lg mb-2 italic">
-          "{item.Note}"
+          {item.Note}
         </p>
       )}
 

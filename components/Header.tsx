@@ -69,22 +69,14 @@ export const Header: React.FC<HeaderProps> = ({
           {pendingCount > 0 && (
             <div
               title={`${pendingCount} modifica${pendingCount > 1 ? 'he' : ''} in attesa di sincronizzazione`}
-              className="flex items-center gap-1 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-2 py-1 rounded-full text-xs font-bold animate-pulse cursor-default"
+              className="flex items-center gap-1 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-2 py-1 rounded-full text-xs font-bold animate-pulse cursor-default mr-1"
             >
               <CloudOff size={13} />
               <span>{pendingCount}</span>
             </div>
           )}
 
-          <button 
-            onClick={onRefresh}
-            disabled={loading}
-            className={`p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors ${loading ? 'animate-spin' : ''}`}
-            title="Aggiorna Dati"
-          >
-            <RefreshCw size={20} />
-          </button>
-          <button 
+          <button
             id="tour-settings"
             onClick={onOpenSettings}
             className="p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"

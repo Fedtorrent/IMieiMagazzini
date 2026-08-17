@@ -35,6 +35,7 @@ import {
 } from './services/storageService';
 import { Home, Plus, BarChart2, Filter, Loader2, WifiOff, RefreshCw, RotateCcw } from 'lucide-react';
 import { App as CapApp } from '@capacitor/app';
+import { Network } from '@capacitor/network';
 
 const StatsDashboard = lazy(() => import('./components/StatsDashboard').then(m => ({ default: m.StatsDashboard })));
 
@@ -189,8 +190,10 @@ export default function App() {
         removeFromPendingQueue(op.id);
       } catch {
         allOk = false;
+        break;
       }
     }
+
     setPendingCount(getPendingCount());
     return allOk;
   }, []);
@@ -198,7 +201,7 @@ export default function App() {
   const loadData = useCallback(async (silent = false) => {
     if (!isApiConfigured()) return;
 
-    // Prova a svuotare la coda ogni volta che carichiamo i dati
+    // Svuota la coda prima di caricare
     await flushPendingQueue();
 
     if (silent) setBackgroundSync(true);
@@ -220,7 +223,7 @@ export default function App() {
     }
   }, [flushPendingQueue]);
 
-  // Caricamento Iniziale + Listener Online
+  // Caricamento Iniziale + Sensore Rete Nativo (Capacitor)
   useEffect(() => {
     if (needsConfig) return;
 
@@ -231,15 +234,31 @@ export default function App() {
         loadData(cached.length > 0);
     }
 
-    // Trigger sync quando torna la connessione
-    const handleOnline = () => {
-      console.log("Connessione ripristinata, avvio sync...");
-      flushPendingQueue();
+    // Gestore per la sincronizzazione automatica quando torna la rete
+    const handleNetworkChange = async (status: any) => {
+      if (status.connected) {
+        console.log("Monitor Rete: Dispositivo ONLINE. Avvio sincronizzazione...");
+        const success = await flushPendingQueue();
+        if (success) {
+           // Sincronizzazione silenziosa dei dati dopo il ritorno online
+           const data = await fetchInventory();
+           if (data) {
+             setItems(data);
+             saveCachedItems(data);
+           }
+        }
+      } else {
+        console.log("Monitor Rete: Dispositivo OFFLINE.");
+      }
     };
 
-    window.addEventListener('online', handleOnline);
-    return () => window.removeEventListener('online', handleOnline);
-  }, [loadData, needsConfig, flushPendingQueue]);
+    // Attivazione sensore nativo Android
+    const setupListener = Network.addListener('networkStatusChange', handleNetworkChange);
+
+    return () => {
+      setupListener.then(l => l.remove());
+    };
+  }, [needsConfig, flushPendingQueue, loadData]);
 
   const handleManualSync = useCallback(async () => {
     await flushPendingQueue();
