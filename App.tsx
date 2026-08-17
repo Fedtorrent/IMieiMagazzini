@@ -175,7 +175,11 @@ export default function App() {
 
   const flushPendingQueue = useCallback(async (): Promise<boolean> => {
     const queue = getPendingQueue();
-    if (queue.length === 0) return true;
+    if (queue.length === 0) {
+      setPendingCount(0);
+      return true;
+    }
+
     let allOk = true;
     for (const op of queue) {
       try {
@@ -193,6 +197,8 @@ export default function App() {
 
   const loadData = useCallback(async (silent = false) => {
     if (!isApiConfigured()) return;
+
+    // Prova a svuotare la coda ogni volta che carichiamo i dati
     await flushPendingQueue();
 
     if (silent) setBackgroundSync(true);
@@ -214,14 +220,26 @@ export default function App() {
     }
   }, [flushPendingQueue]);
 
+  // Caricamento Iniziale + Listener Online
   useEffect(() => {
     if (needsConfig) return;
+
     const cached = loadCachedItems();
     if (cached.length > 0) setItems(cached);
+
     if (isCacheStale() || cached.length === 0) {
         loadData(cached.length > 0);
     }
-  }, [loadData, needsConfig]);
+
+    // Trigger sync quando torna la connessione
+    const handleOnline = () => {
+      console.log("Connessione ripristinata, avvio sync...");
+      flushPendingQueue();
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [loadData, needsConfig, flushPendingQueue]);
 
   const handleManualSync = useCallback(async () => {
     await flushPendingQueue();
@@ -443,7 +461,14 @@ export default function App() {
                           if (!target) return;
                           const updated = { ...target, Qta: Math.max(0, target.Qta + delta) };
                           setItems(items.map(i => i.IdLista === id ? updated : i));
-                          try { await updateInventoryItem(updated); } catch { addToPendingQueue('update', updated); setPendingCount(getPendingCount()); }
+                          try {
+                            await updateInventoryItem(updated);
+                            // Se riesce, prova a svuotare anche il resto della coda
+                            flushPendingQueue();
+                          } catch {
+                            addToPendingQueue('update', updated);
+                            setPendingCount(getPendingCount());
+                          }
                         }}
                         isCompact={isCompactMode}
                       />
@@ -491,12 +516,25 @@ export default function App() {
              if (editingItem) {
                 setItems(items.map(i => i.IdLista === item.IdLista ? item : i));
                 setEditingItem(null);
-                try { await updateInventoryItem(item); } catch { addToPendingQueue('update', item); setPendingCount(getPendingCount()); }
+                try {
+                  await updateInventoryItem(item);
+                  flushPendingQueue();
+                } catch {
+                  addToPendingQueue('update', item);
+                  setPendingCount(getPendingCount());
+                }
              } else {
                 const itemWithFamily = { ...item, IdFamiglia: getFamilyCode() || '' };
                 setItems([itemWithFamily, ...items]);
                 setIsAdding(false);
-                try { await addInventoryItem(itemWithFamily); } catch { addToPendingQueue('create', itemWithFamily); setPendingCount(getPendingCount()); }
+                setItemToDuplicate(null);
+                try {
+                  await addInventoryItem(itemWithFamily);
+                  flushPendingQueue();
+                } catch {
+                  addToPendingQueue('create', itemWithFamily);
+                  setPendingCount(getPendingCount());
+                }
              }
           }}
           isSaving={false}
@@ -514,7 +552,13 @@ export default function App() {
              const id = itemToDelete;
              setItems(items.filter(i => i.IdLista !== id));
              setItemToDelete(null);
-             try { await deleteInventoryItem(id); } catch { addToPendingQueue('delete', undefined, id); setPendingCount(getPendingCount()); }
+             try {
+               await deleteInventoryItem(id);
+               flushPendingQueue();
+             } catch {
+               addToPendingQueue('delete', undefined, id);
+               setPendingCount(getPendingCount());
+             }
           }}
           onCancel={() => setItemToDelete(null)}
           isProcessing={isDeleting}
