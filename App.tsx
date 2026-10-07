@@ -5,6 +5,7 @@ import { InventoryCard } from './components/InventoryCard';
 import { EditForm } from './components/EditForm';
 import { SettingsModal } from './components/SettingsModal';
 import { ConfirmationModal } from './components/ConfirmationModal';
+import { NoNetworkModal } from './components/NoNetworkModal';
 import { FilterBar } from './components/FilterBar';
 import { AppTutorial } from './components/AppTutorial';
 import { WelcomeScreen } from './components/WelcomeScreen';
@@ -45,6 +46,11 @@ export default function App() {
   const [backgroundSync, setBackgroundSync] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(() => getPendingCount());
+
+  const [isOffline, setIsOffline] = useState(false);
+  const [showNoNetworkModal, setShowNoNetworkModal] = useState(false);
+  const [isRetryingNetwork, setIsRetryingNetwork] = useState(false);
+  const [hasLoadedArchive, setHasLoadedArchive] = useState(false);
 
   useEffect(() => {
     if (typeof (window as any).__hideSplash === 'function') {
@@ -174,6 +180,15 @@ export default function App() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  const handleExitApp = useCallback(async () => {
+    try {
+      await CapApp.exitApp();
+    } catch (e) {
+      console.warn("Impossibile chiudere l'app via CapApp.exitApp()", e);
+      window.close();
+    }
+  }, []);
+
   const flushPendingQueue = useCallback(async (): Promise<boolean> => {
     const queue = getPendingQueue();
     if (queue.length === 0) {
@@ -198,8 +213,23 @@ export default function App() {
     return allOk;
   }, []);
 
-  const loadData = useCallback(async (silent = false) => {
+  const loadData = useCallback(async (silent = false, isInitial = false) => {
     if (!isApiConfigured()) return;
+
+    try {
+      const status = await Network.getStatus();
+      setIsOffline(!status.connected);
+      if (!status.connected) {
+        if (isInitial || !hasLoadedArchive) {
+          setShowNoNetworkModal(true);
+        }
+        setLoading(false);
+        setBackgroundSync(false);
+        return;
+      }
+    } catch (e) {
+      console.warn("Impossibile verificare lo stato della rete", e);
+    }
 
     // Svuota la coda prima di caricare
     await flushPendingQueue();
@@ -214,41 +244,84 @@ export default function App() {
       setItems(data || []);
       saveCachedItems(data || []);
       setError(null);
+      setShowNoNetworkModal(false);
+      setHasLoadedArchive(true);
+      setIsOffline(false);
     } catch (err: any) {
       console.error("Errore caricamento:", err);
       setError(err.message || "Errore di connessione al database.");
+      if (isInitial || !hasLoadedArchive) {
+        setShowNoNetworkModal(true);
+      }
     } finally {
       setLoading(false);
       setBackgroundSync(false);
     }
-  }, [flushPendingQueue]);
+  }, [flushPendingQueue, hasLoadedArchive]);
+
+  const handleRetryNetwork = useCallback(async () => {
+    setIsRetryingNetwork(true);
+    try {
+      const status = await Network.getStatus();
+      setIsOffline(!status.connected);
+      if (!status.connected) {
+        setShowNoNetworkModal(true);
+      } else {
+        await loadData(false, true);
+      }
+    } catch {
+      await loadData(false, true);
+    } finally {
+      setIsRetryingNetwork(false);
+    }
+  }, [loadData]);
 
   // Caricamento Iniziale + Sensore Rete Nativo (Capacitor)
   useEffect(() => {
     if (needsConfig) return;
 
-    const cached = loadCachedItems();
-    if (cached.length > 0) setItems(cached);
+    const initNetworkAndData = async () => {
+      try {
+        const status = await Network.getStatus();
+        setIsOffline(!status.connected);
+        if (!status.connected) {
+          setShowNoNetworkModal(true);
+          return;
+        }
+      } catch (e) {
+        console.warn("Impossibile verificare la connessione all'avvio", e);
+      }
 
-    if (isCacheStale() || cached.length === 0) {
-        loadData(cached.length > 0);
-    }
+      const cached = loadCachedItems();
+      if (cached.length > 0) {
+        setItems(cached);
+      }
+
+      await loadData(cached.length > 0, true);
+    };
+
+    initNetworkAndData();
 
     // Gestore per la sincronizzazione automatica quando torna la rete
     const handleNetworkChange = async (status: any) => {
+      setIsOffline(!status.connected);
       if (status.connected) {
         console.log("Monitor Rete: Dispositivo ONLINE. Avvio sincronizzazione...");
+        setShowNoNetworkModal(false);
         const success = await flushPendingQueue();
         if (success) {
-           // Sincronizzazione silenziosa dei dati dopo il ritorno online
            const data = await fetchInventory();
            if (data) {
              setItems(data);
              saveCachedItems(data);
+             setHasLoadedArchive(true);
            }
         }
       } else {
-        console.log("Monitor Rete: Dispositivo OFFLINE.");
+        console.log("Monitor Rete: Dispositivo OFFLINE. Modalità coda attiva.");
+        if (!hasLoadedArchive) {
+          setShowNoNetworkModal(true);
+        }
       }
     };
 
@@ -258,11 +331,11 @@ export default function App() {
     return () => {
       setupListener.then(l => l.remove());
     };
-  }, [needsConfig, flushPendingQueue, loadData]);
+  }, [needsConfig, flushPendingQueue, loadData, hasLoadedArchive]);
 
   const handleManualSync = useCallback(async () => {
     await flushPendingQueue();
-    await loadData(false);
+    await loadData(false, false);
   }, [flushPendingQueue, loadData]);
 
   const handleConfigSave = () => {
@@ -376,6 +449,12 @@ export default function App() {
             initialMode={settingsMode}
           />
         )}
+        <NoNetworkModal
+          isOpen={showNoNetworkModal}
+          onRetry={handleRetryNetwork}
+          onExit={handleExitApp}
+          isRetrying={isRetryingNetwork}
+        />
       </div>
     );
   }
@@ -391,6 +470,7 @@ export default function App() {
         isCompactMode={isCompactMode}
         onToggleCompactMode={() => setIsCompactMode(!isCompactMode)}
         pendingCount={pendingCount}
+        isOffline={isOffline}
       />
 
       <Sidebar 
@@ -696,6 +776,13 @@ export default function App() {
             </div>
         </div>
       )}
+
+      <NoNetworkModal
+        isOpen={showNoNetworkModal}
+        onRetry={handleRetryNetwork}
+        onExit={handleExitApp}
+        isRetrying={isRetryingNetwork}
+      />
     </div>
   );
 }

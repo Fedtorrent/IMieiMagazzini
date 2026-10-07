@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Search, Settings, RefreshCw, X, LayoutList, Rows, CloudOff } from 'lucide-react';
 
@@ -11,6 +10,7 @@ interface HeaderProps {
   isCompactMode: boolean;
   onToggleCompactMode: () => void;
   pendingCount?: number;
+  isOffline?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({ 
@@ -22,6 +22,7 @@ export const Header: React.FC<HeaderProps> = ({
     isCompactMode,
     onToggleCompactMode,
     pendingCount = 0,
+    isOffline = false,
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm px-4 py-3 transition-colors duration-200">
@@ -65,16 +66,24 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         <div className="flex items-center gap-1">
-          {/* Badge operazioni in attesa */}
-          {pendingCount > 0 && (
+          {/* Indicatore Offline e Coda Modifiche */}
+          {pendingCount > 0 ? (
             <div
               title={`${pendingCount} modifica${pendingCount > 1 ? 'he' : ''} in attesa di sincronizzazione`}
-              className="flex items-center gap-1 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-2 py-1 rounded-full text-xs font-bold animate-pulse cursor-default mr-1"
+              className="flex items-center gap-1 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-2.5 py-1 rounded-full text-xs font-bold animate-pulse cursor-default mr-1"
             >
-              <CloudOff size={13} />
+              <CloudOff size={14} />
               <span>{pendingCount}</span>
             </div>
-          )}
+          ) : isOffline ? (
+            <div
+              title="Dispositivo Offline - Nessuna connessione di rete"
+              className="flex items-center gap-1 bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 px-2.5 py-1 rounded-full text-xs font-bold cursor-default mr-1"
+            >
+              <CloudOff size={14} />
+              <span className="hidden xs:inline text-[10px] uppercase font-black tracking-wider">Offline</span>
+            </div>
+          ) : null}
 
           <button
             id="tour-settings"
