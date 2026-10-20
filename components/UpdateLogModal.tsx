@@ -9,6 +9,19 @@ interface UpdateLogModalProps {
 
 const UPDATE_LOG = [
   {
+    version: '1.2.0',
+    date: '14/08/2026',
+    title: 'Supporto Completo Offline & Coda Modifiche',
+    changes: [
+      'Avvio istantaneo dell\'app anche in assenza di connessione internet/Wi-Fi',
+      'Caricamento ed accesso immediato all\'archivio locale salvato sul dispositivo',
+      'Tutte le modifiche effettuate offline (quantità, prodotti, eliminazioni) vengono salvate subito in locale',
+      'Coda intelligente delle operazioni per la sincronizzazione al DB non appena torna la rete',
+      'Consolidamento automatico delle modifiche offline per evitare chiamate ridondanti',
+      'Indicatore di stato ed avviso visivo quando il dispositivo è in modalità offline'
+    ]
+  },
+  {
     version: '1.1.0',
     date: '13/08/2026',
     title: 'Migrazione Supabase & Ottimizzazioni',

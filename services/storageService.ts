@@ -80,13 +80,52 @@ export const getPendingQueue = (): PendingOp[] => {
   }
 };
 
-/** Aggiunge un'operazione alla pending queue. */
+/** Aggiunge un'operazione alla pending queue con consolidamento intelligante. */
 export const addToPendingQueue = (
   action: 'create' | 'update' | 'delete',
   item?: InventoryItem,
   itemId?: string
 ): void => {
-  const queue = getPendingQueue();
+  let queue = getPendingQueue();
+  const idToMatch = item?.IdLista || itemId;
+
+  if (action === 'update' && item && idToMatch) {
+    // Se c'è già un 'update' o 'create' in sospeso per lo stesso elemento, aggiorna l'item
+    const existingIndex = queue.findIndex(
+      op => (op.action === 'update' || op.action === 'create') && op.item?.IdLista === idToMatch
+    );
+
+    if (existingIndex !== -1) {
+      queue[existingIndex].item = item;
+      queue[existingIndex].timestamp = Date.now();
+      try {
+        localStorage.setItem(PENDING_QUEUE_KEY, JSON.stringify(queue));
+      } catch (e) {
+        console.warn('storageService: impossibile salvare pending queue', e);
+      }
+      return;
+    }
+  } else if (action === 'delete' && idToMatch) {
+    // Se l'elemento è stato creato offline e poi eliminato offline prima della sync,
+    // rimuoviamo semplicemente le operazioni in sospeso senza inviare nulla al server.
+    const hadPendingCreate = queue.some(
+      op => op.action === 'create' && op.item?.IdLista === idToMatch
+    );
+
+    queue = queue.filter(
+      op => op.item?.IdLista !== idToMatch && op.itemId !== idToMatch
+    );
+
+    if (hadPendingCreate) {
+      try {
+        localStorage.setItem(PENDING_QUEUE_KEY, JSON.stringify(queue));
+      } catch (e) {
+        console.warn('storageService: impossibile salvare pending queue', e);
+      }
+      return;
+    }
+  }
+
   const op: PendingOp = {
     id: generateOpId(),
     action,

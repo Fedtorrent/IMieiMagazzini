@@ -216,13 +216,17 @@ export default function App() {
   const loadData = useCallback(async (silent = false, isInitial = false) => {
     if (!isApiConfigured()) return;
 
+    // Carica subito la cache locale se disponibile
+    const cached = loadCachedItems();
+    if (cached.length > 0) {
+      setItems(cached);
+      setHasLoadedArchive(true);
+    }
+
     try {
       const status = await Network.getStatus();
       setIsOffline(!status.connected);
       if (!status.connected) {
-        if (isInitial || !hasLoadedArchive) {
-          setShowNoNetworkModal(true);
-        }
         setLoading(false);
         setBackgroundSync(false);
         return;
@@ -231,7 +235,7 @@ export default function App() {
       console.warn("Impossibile verificare lo stato della rete", e);
     }
 
-    // Svuota la coda prima di caricare
+    // Svuota la coda prima di caricare dal server
     await flushPendingQueue();
 
     if (silent) setBackgroundSync(true);
@@ -248,25 +252,25 @@ export default function App() {
       setHasLoadedArchive(true);
       setIsOffline(false);
     } catch (err: any) {
-      console.error("Errore caricamento:", err);
-      setError(err.message || "Errore di connessione al database.");
-      if (isInitial || !hasLoadedArchive) {
-        setShowNoNetworkModal(true);
+      console.error("Errore caricamento remoto:", err);
+      setIsOffline(true);
+      const currentCache = loadCachedItems();
+      if (currentCache.length > 0) {
+        setItems(currentCache);
+        setHasLoadedArchive(true);
       }
     } finally {
       setLoading(false);
       setBackgroundSync(false);
     }
-  }, [flushPendingQueue, hasLoadedArchive]);
+  }, [flushPendingQueue]);
 
   const handleRetryNetwork = useCallback(async () => {
     setIsRetryingNetwork(true);
     try {
       const status = await Network.getStatus();
       setIsOffline(!status.connected);
-      if (!status.connected) {
-        setShowNoNetworkModal(true);
-      } else {
+      if (status.connected) {
         await loadData(false, true);
       }
     } catch {
@@ -281,22 +285,27 @@ export default function App() {
     if (needsConfig) return;
 
     const initNetworkAndData = async () => {
+      // 1. Carica subito i dati salvati in locale per l'avvio immediato offline
+      const cached = loadCachedItems();
+      if (cached.length > 0) {
+        setItems(cached);
+        setHasLoadedArchive(true);
+      }
+
+      // 2. Verifica lo stato della rete
       try {
         const status = await Network.getStatus();
         setIsOffline(!status.connected);
         if (!status.connected) {
-          setShowNoNetworkModal(true);
+          // Dispositivo offline: l'app si avvia regolarmente con i dati locali
+          setLoading(false);
           return;
         }
       } catch (e) {
         console.warn("Impossibile verificare la connessione all'avvio", e);
       }
 
-      const cached = loadCachedItems();
-      if (cached.length > 0) {
-        setItems(cached);
-      }
-
+      // 3. Se online, scarica i dati aggiornati dal DB
       await loadData(cached.length > 0, true);
     };
 
@@ -304,9 +313,10 @@ export default function App() {
 
     // Gestore per la sincronizzazione automatica quando torna la rete
     const handleNetworkChange = async (status: any) => {
-      setIsOffline(!status.connected);
-      if (status.connected) {
-        console.log("Monitor Rete: Dispositivo ONLINE. Avvio sincronizzazione...");
+      const connected = !!status.connected;
+      setIsOffline(!connected);
+      if (connected) {
+        console.log("Monitor Rete: Dispositivo ONLINE. Avvio sincronizzazione coda...");
         setShowNoNetworkModal(false);
         const success = await flushPendingQueue();
         if (success) {
@@ -319,9 +329,6 @@ export default function App() {
         }
       } else {
         console.log("Monitor Rete: Dispositivo OFFLINE. Modalità coda attiva.");
-        if (!hasLoadedArchive) {
-          setShowNoNetworkModal(true);
-        }
       }
     };
 
@@ -331,7 +338,7 @@ export default function App() {
     return () => {
       setupListener.then(l => l.remove());
     };
-  }, [needsConfig, flushPendingQueue, loadData, hasLoadedArchive]);
+  }, [needsConfig, flushPendingQueue, loadData]);
 
   const handleManualSync = useCallback(async () => {
     await flushPendingQueue();
@@ -494,7 +501,18 @@ export default function App() {
 
       <main className="max-w-3xl mx-auto px-4 py-6">
           <>
-            {error && (
+            {isOffline && (
+              <div className="mb-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 p-3.5 rounded-2xl flex items-center justify-between gap-3 text-xs font-semibold shadow-sm">
+                <div className="flex items-center gap-2.5">
+                  <WifiOff size={18} className="shrink-0 text-amber-600 dark:text-amber-400" />
+                  <span>
+                    <strong>Modalità Offline:</strong> L'app è attiva. Le modifiche vengono salvate in locale e saranno inviate al DB appena tornerà la connessione.
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {error && !isOffline && (
               <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 p-4 rounded-xl flex items-start gap-3">
                  <WifiOff size={24} className="mt-1 shrink-0" />
                  <div className="flex-1">
@@ -559,10 +577,13 @@ export default function App() {
                           const target = items.find(i => i.IdLista === id);
                           if (!target) return;
                           const updated = { ...target, Qta: Math.max(0, target.Qta + delta) };
-                          setItems(items.map(i => i.IdLista === id ? updated : i));
+                          const updatedItems = items.map(i => i.IdLista === id ? updated : i);
+                          setItems(updatedItems);
+                          saveCachedItems(updatedItems);
                           try {
+                            const status = await Network.getStatus();
+                            if (!status.connected) throw new Error("Offline");
                             await updateInventoryItem(updated);
-                            // Se riesce, prova a svuotare anche il resto della coda
                             flushPendingQueue();
                           } catch {
                             addToPendingQueue('update', updated);
@@ -613,9 +634,13 @@ export default function App() {
           onCancel={() => { setIsAdding(false); setEditingItem(null); setItemToDuplicate(null); }}
           onSave={async (item) => {
              if (editingItem) {
-                setItems(items.map(i => i.IdLista === item.IdLista ? item : i));
+                const updatedItems = items.map(i => i.IdLista === item.IdLista ? item : i);
+                setItems(updatedItems);
+                saveCachedItems(updatedItems);
                 setEditingItem(null);
                 try {
+                  const status = await Network.getStatus();
+                  if (!status.connected) throw new Error("Offline");
                   await updateInventoryItem(item);
                   flushPendingQueue();
                 } catch {
@@ -624,10 +649,14 @@ export default function App() {
                 }
              } else {
                 const itemWithFamily = { ...item, IdFamiglia: getFamilyCode() || '' };
-                setItems([itemWithFamily, ...items]);
+                const updatedItems = [itemWithFamily, ...items];
+                setItems(updatedItems);
+                saveCachedItems(updatedItems);
                 setIsAdding(false);
                 setItemToDuplicate(null);
                 try {
+                  const status = await Network.getStatus();
+                  if (!status.connected) throw new Error("Offline");
                   await addInventoryItem(itemWithFamily);
                   flushPendingQueue();
                 } catch {
@@ -649,9 +678,14 @@ export default function App() {
           message="Sei sicuro?"
           onConfirm={async () => {
              const id = itemToDelete;
-             setItems(items.filter(i => i.IdLista !== id));
+             if (!id) return;
+             const updatedItems = items.filter(i => i.IdLista !== id);
+             setItems(updatedItems);
+             saveCachedItems(updatedItems);
              setItemToDelete(null);
              try {
+               const status = await Network.getStatus();
+               if (!status.connected) throw new Error("Offline");
                await deleteInventoryItem(id);
                flushPendingQueue();
              } catch {
