@@ -10,7 +10,7 @@ interface UpdateLogModalProps {
 const UPDATE_LOG = [
   {
     version: '1.2.0',
-    date: '14/08/2026',
+    date: '20/10/2026',
     title: 'Supporto Completo Offline & Coda Modifiche',
     changes: [
       'Avvio istantaneo dell\'app anche in assenza di connessione internet/Wi-Fi',
